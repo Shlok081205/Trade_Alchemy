@@ -109,12 +109,12 @@ class FeatureCalculator:
             'Trend_Strength', 'Body_Size', 'Upper_Shadow', 'Lower_Shadow',
             'Target'
         ]
-        return df
-        #return df[feature_cols].copy()
+
+        return df[feature_cols].copy()
 
 
 if __name__ == "__main__":
-    from yahoo_scraper import YahooScraper
+    from Web_Scraping import YahooScraper
     ys  = YahooScraper()
     fc =  FeatureCalculator()
     data = ys.scrape("TCS.NS", time_range="5d", use_proxy=False, v10=True, v8=True, v7=True,v10_full_access=True)
