@@ -98,6 +98,7 @@ class FeatureCalculator:
 
         # Select feature columns
         feature_cols = [
+            'AdjClose',
             'Ret', 'ATR', 'Vol_Regime', 'Realized_Vol',
             'MACD_Hist', 'RSI', 'RSI_Change', 'RSI_Acceleration',
             'Mom_5', 'Mom_20', 'Mom_60',

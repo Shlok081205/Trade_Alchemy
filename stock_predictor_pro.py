@@ -281,7 +281,7 @@ class StockPredictor:
 
         # Prepare data
         y = df['Target'].values
-        X = df.drop('Target', axis=1).values
+        X = df.drop(['Target', 'AdjClose', 'Next_Ret'], axis=1, errors='ignore').values
 
         # Validate data
         if np.any(np.isnan(X)) or np.any(np.isinf(X)):
@@ -460,7 +460,7 @@ class StockPredictionApp:
             )
 
             # Get current price info
-            current_price = main_df['Close'].iloc[-1] if 'Close' in main_df.columns else None
+            current_price = main_df['AdjClose'].iloc[-1] if 'AdjClose' in main_df.columns else None
             current_date = main_df.index[-1]
 
             # Step 3: Train model
