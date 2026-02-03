@@ -1,5 +1,6 @@
 import requests
 import time
+import pandas as pd
 
 # ===== CUSTOM EXCEPTIONS =====
 class ScraperException(Exception):
@@ -25,8 +26,7 @@ class InvalidTickerError(ScraperException):
 # ===== MAIN SCRAPER CLASS =====
 class YahooScraper:
 
-    @staticmethod
-    def _setup_session(use_proxy=False, max_retries=3):
+    def _setup_session(self,use_proxy=False, max_retries=3):
         """Setup Yahoo Finance session with retry logic"""
         for attempt in range(max_retries):
             try:
@@ -68,8 +68,7 @@ class YahooScraper:
         raise SessionSetupError("Failed to setup session after all retries")
 
 
-    @staticmethod
-    def data_v10(ticker,session,crumb,full_access = False):
+    def data_v10(self,ticker,session,crumb,full_access = False):
         """Fetch v10 data (Fundamentals)"""
         try:
             if full_access:
@@ -128,8 +127,7 @@ class YahooScraper:
             print(f"Error v10: {e}")
             return None
 
-    @staticmethod
-    def data_v8(ticker,session, time_range = "1d", interval = "1d"):
+    def data_v8(self,ticker,session, time_range = "1d", interval = "1d"):
         """Fetch v8 data (Historical Prices)"""
         try:
             if time_range == "max":
@@ -166,8 +164,7 @@ class YahooScraper:
             print(f"Error v8: {e}")
             return None
 
-    @staticmethod
-    def data_v7(ticker,session,crumb):
+    def data_v7(self,ticker,session,crumb):
         """Fetch v7 data (Current Quote)"""
         try:
             url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={ticker}&crumb={crumb}"
@@ -208,8 +205,7 @@ class YahooScraper:
             print(f"Error v7: {e}")
             return None
 
-    @staticmethod
-    def check_proxy_ip(use_proxy = True):
+    def check_proxy_ip(self,use_proxy = True):
         """Check current IP"""
         try:
             session = requests.Session()
@@ -226,13 +222,35 @@ class YahooScraper:
 
         return None
 
+
+    def v8_formatter(self,ticker_data):
+        try:
+            if not ticker_data.get('v8'):
+                raise Exception("Historical Data Not Present")
+            else:
+                data = pd.DataFrame(ticker_data.get('v8'))
+
+                data["TimeStamp"] = pd.to_datetime(data["TimeStamp"], unit="s")
+                data["TimeStamp"] = data["TimeStamp"].dt.date
+                data.rename(columns={"TimeStamp": "Date"}, inplace=True)
+                data.set_index("Date",inplace=True)
+
+                cols = ["Close", "Open", "High", "Low", "AdjClose"]
+                for i in cols:
+                    data[i] = data[i].astype("float32")
+
+                return data
+
+        except Exception as e:
+            print("Exception Formatter v8_formatter: ",e)
+
+
     def scrape(self, ticker,ip_address = None,time_range = "1d",interval = "1d",use_proxy = False,v10 = False,
                v8= False,v7= False,v10_full_access = False,max_retries: int = 3):
         """
         Main scraping method
         """
         result = {}
-        company_name = None
         try:
             # 1. Setup Session
             try:
@@ -241,15 +259,15 @@ class YahooScraper:
                 print(f"Session failed: {e}")
                 return None
 
-            print(self.check_proxy_ip(use_proxy=True))
+            #print(self.check_proxy_ip(use_proxy=True))
 
             # 2. Check Proxy
             if use_proxy and ip_address:
                 current_ip = self.check_proxy_ip(use_proxy=True)
                 if current_ip and current_ip != ip_address:
-                    print("Proxy Active")
+                    self.proxy = "Proxy Active"
                 else:
-                    print("Proxy Inactive")
+                    self.proxy = "Proxy Inactive"
 
             # 3. Fetch Data Modules
             if v10:
@@ -263,16 +281,19 @@ class YahooScraper:
 
             return result
 
-        except Exception as e:
+        except Exception as  e:
             print(f"Scrape master error for {ticker}: {e}")
-            return None
 
 
 if __name__ == "__main__":
+    start = time.perf_counter()
     ys =YahooScraper()
     ip = ys.check_proxy_ip(use_proxy=False)
-    print(ip)
-    s = ys.scrape("TCS.NS",ip,time_range="5d",use_proxy=True,v10=True,v8=True,v7=True)
+    print("My IP:",ip)
+    s = ys.scrape("ETH-USD",ip_address=ip,time_range="1d",use_proxy=True,v10=True,v8=True,v7=True,v10_full_access=False)
+    end = time.perf_counter()
+    print("Tor Proxy Status:",ys.proxy)
     print("v10",s["v10"],"\n\n\n\n")
     print("v8",s["v8"],"\n\n\n\n")
     print("v7",s["v7"],"\n\n\n\n")
+    print(ys.v8_formatter(s))
