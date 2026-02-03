@@ -88,13 +88,10 @@ class FeatureCalculator:
         df['Upper_Shadow'] = (df['High'] - df[['AdjClose', 'Open']].max(axis=1)) / df['AdjClose']
         df['Lower_Shadow'] = (df[['AdjClose', 'Open']].min(axis=1) - df['Low']) / df['AdjClose']
 
-        # ============= TARGET =============
         # Volatility-adjusted target (more sophisticated)
         df['Next_Ret'] = df['Ret'].shift(-1)
-        df['Target'] = (df['Next_Ret'] > threshold).astype(int)
 
-        # Clean up
-        #df.dropna(inplace=True)
+        df['Target'] = (df['Next_Ret'] > threshold).astype(int)
 
         # Select feature columns
         feature_cols = [

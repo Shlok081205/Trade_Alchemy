@@ -48,22 +48,35 @@ class MultiTimeframeLSTM:
         return np.array(X_seq), np.array(y_seq)
 
     def train_and_predict(self, df, use_class_weights=True):
-        """Train model and return predictions with confidence"""
         if len(df) < self.lookback_long + 100:
             return None
 
         y = df['Target'].values
-        X_scaled = self.scaler.fit_transform(df.drop('Target', axis=1).values)
+        X = df.drop('Target', axis=1).values
 
-        # Use medium lookback (40 days)
-        X_seq, y_seq = self.prepare_sequences(X_scaled, y, self.lookback_medium)
+        split_idx = int(len(X) * 0.85)
+        X_train_raw = X[:split_idx]
+        X_test_raw = X[split_idx:]
+        y_train_raw = y[:split_idx]
+        y_test_raw = y[split_idx:]
 
-        # Train/test split
-        split = int(len(X_seq) * 0.85)
-        X_train, y_train = X_seq[:split], y_seq[:split]
-        X_test, y_test = X_seq[split:], y_seq[split:]
+        self.scaler.fit(X_train_raw)
 
-        # Calculate class weights if requested
+        X_train_scaled = self.scaler.transform(X_train_raw)
+        X_test_scaled = self.scaler.transform(X_test_raw)
+
+        # Now create sequences from already-split data
+        X_train, y_train = self.prepare_sequences(
+            X_train_scaled, y_train_raw, self.lookback_medium
+        )
+        X_test, y_test = self.prepare_sequences(
+            X_test_scaled, y_test_raw, self.lookback_medium
+        )
+
+        # Rest of your code continues unchanged...
+        if len(X_train) < 100:
+            return None
+
         class_weight = None
         if use_class_weights:
             class_counts = np.bincount(y_train)
@@ -94,8 +107,9 @@ class MultiTimeframeLSTM:
         test_probs = self.model.predict(X_test, verbose=0).flatten()
         test_preds = (test_probs > 0.5).astype(int)
 
-        # Get last prediction
-        last_seq = X_scaled[-self.lookback_medium:].reshape(1, self.lookback_medium, X_scaled.shape[1])
+        # Get last prediction - scale the FULL dataset for final prediction
+        X_full_scaled = self.scaler.transform(X)
+        last_seq = X_full_scaled[-self.lookback_medium:].reshape(1, self.lookback_medium, X_full_scaled.shape[1])
         next_prob = self.model.predict(last_seq, verbose=0)[0][0]
 
         # Calculate metrics

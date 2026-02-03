@@ -43,8 +43,8 @@ class Config:
     LOOKBACK_LONG = 60
 
     # Hybrid Strategy Parameters
-    RECENT_DATA_WEIGHT = 2.0
-    RECENT_WEEKS_EMPHASIZED = 10
+    RECENT_DATA_WEIGHT = 3.5
+    RECENT_WEEKS_EMPHASIZED = 12
 
     # Trading Parameters
     THRESHOLD = 0.002  # 0.2% price movement threshold
@@ -90,6 +90,9 @@ def calculate_sample_weights(train_size, recent_weeks=10, weight_multiplier=2.0)
         Array of sample weights
     """
     weights = np.ones(train_size)
+
+    if train_size < 50:
+        return weights
 
     # Calculate cutoff for "recent" data
     recent_days = recent_weeks * 5  # 5 trading days per week
@@ -164,7 +167,7 @@ class DataCollector:
     def fetch_ticker_data(self, ticker, time_range="5y"):
         """Fetch historical data for a single ticker"""
         try:
-            raw_data = self.ys.scrape(ticker, use_proxy=False, v8=True, time_range=time_range)
+            raw_data = self.ys.scrape(ticker, use_proxy=True, v8=True, time_range=time_range)
 
             if raw_data is None or 'v8' not in raw_data:
                 print(f"  ⚠️  {ticker}: No data returned from API")
@@ -272,127 +275,158 @@ class StockPredictor:
 
     def train_with_hybrid_weights(self, df):
         """
-        Train model using ALL available data with Hybrid weighting
+        Two-Pass Production Training:
+        1. Train on Split Data -> Find optimal Epochs
+        2. Retrain on ALL Data -> Maximize Recency
         """
-        print_section("TRAINING MODEL - HYBRID WEIGHTED STRATEGY")
+        print_section("TRAINING MODEL - PRODUCTION MODE")
 
         if len(df) < self.config.LOOKBACK_LONG + 50:
             raise ValueError(f"Insufficient data. Need at least {self.config.LOOKBACK_LONG + 50} days")
 
-        # Prepare data
-        y = df['Target'].values
-        X = df.drop(['Target', 'AdjClose', 'Next_Ret'], axis=1, errors='ignore').values
+        # 1. Prepare ALL Data
+        y_all = df['Target'].values
+        X_all = df.drop(['Target', 'AdjClose', 'Next_Ret'], axis=1, errors='ignore').values
 
-        # Validate data
-        if np.any(np.isnan(X)) or np.any(np.isinf(X)):
-            print("⚠️  Warning: Found NaN or Inf values in features. Cleaning...")
-            X = np.nan_to_num(X, nan=0.0, posinf=1e6, neginf=-1e6)
+        # Cleaning
+        if np.any(np.isnan(X_all)):
+            X_all = np.nan_to_num(X_all, nan=0.0)
 
-        if np.any(np.isnan(y)) or np.any(np.isinf(y)):
-            raise ValueError("Target variable contains NaN or Inf values!")
+        # ====================================================================
+        # PASS 1: Find Optimal Training Length (The "Safety Check")
+        # ====================================================================
+        print("🔍 PASS 1: Determining optimal training duration...")
 
-        print(f"Training samples: {len(X)}")
-        print(f"Features: {X.shape[1]}")
-        print(f"Class distribution: UP={np.sum(y == 1)}, DOWN={np.sum(y == 0)}")
+        # Split 85/15 just to find the stopping point
+        split_idx = int(len(X_all) * 0.85)
+        X_train_raw = X_all[:split_idx]
+        X_val_raw = X_all[split_idx:]
 
-        # Check for severe class imbalance
-        class_ratio = np.sum(y == 1) / len(y)
-        if class_ratio < 0.1 or class_ratio > 0.9:
-            print(f"⚠️  Warning: Severe class imbalance detected ({class_ratio:.1%} positive class)")
+        # Fit Scaler on TRAIN only (for Pass 1)
+        from sklearn.preprocessing import RobustScaler
+        temp_scaler = RobustScaler()
+        temp_scaler.fit(X_train_raw)
 
-        # Calculate sample weights for Hybrid strategy
-        print(f"\n📊 Applying Hybrid Weighting...")
-        print(f"   Recent {self.config.RECENT_WEEKS_EMPHASIZED} weeks: "
-              f"{self.config.RECENT_DATA_WEIGHT}x weight")
-
-        sample_weights = calculate_sample_weights(
-            len(X),
-            recent_weeks=self.config.RECENT_WEEKS_EMPHASIZED,
-            weight_multiplier=self.config.RECENT_DATA_WEIGHT
+        # Prepare Sequences for Pass 1
+        X_train_seq, y_train_seq, w_train_seq = self._prepare_sequences(
+            X_train_raw, y_all[:split_idx], temp_scaler, is_training=True
+        )
+        X_val_seq, y_val_seq, _ = self._prepare_sequences(
+            X_val_raw, y_all[split_idx:], temp_scaler, is_training=False
         )
 
-        print(f"   Weight range: {sample_weights.min():.2f} - {sample_weights.max():.2f}")
-        print(f"   Average weight: {sample_weights.mean():.2f}")
-
-        # Initialize and train model
-        print(f"\n🤖 Initializing LSTM model...")
+        # Initialize Temp Model
         self.model = MultiTimeframeLSTM(
             lookback_short=self.config.LOOKBACK_SHORT,
             lookback_medium=self.config.LOOKBACK_MEDIUM,
             lookback_long=self.config.LOOKBACK_LONG
         )
+        self.model.build_model((X_train_seq.shape[1], X_train_seq.shape[2]))
 
-        # Scale data
-        from sklearn.preprocessing import RobustScaler
-        self.scaler = RobustScaler()
-        X_scaled = self.scaler.fit_transform(X)
-
-        # Prepare sequences
-        print(f"📈 Preparing sequences (lookback={self.config.LOOKBACK_MEDIUM})...")
-        X_seq, y_seq, weights_seq = [], [], []
-
-        for i in range(self.config.LOOKBACK_MEDIUM, len(X_scaled)):
-            X_seq.append(X_scaled[i - self.config.LOOKBACK_MEDIUM:i])
-            y_seq.append(y[i])
-            weights_seq.append(sample_weights[i])
-
-        X_seq = np.array(X_seq)
-        y_seq = np.array(y_seq)
-        weights_seq = np.array(weights_seq)
-
-        print(f"✓ Sequence shape: {X_seq.shape}")
-
-        # Validate minimum samples
-        if len(X_seq) < 100:
-            raise ValueError(f"Insufficient sequences for training: {len(X_seq)} (need at least 100)")
-
-        # Train model
-        print(f"\n🚀 Training model (this may take a few minutes)...")
-
-        # Build model
-        self.model.build_model((X_seq.shape[1], X_seq.shape[2]))
-
-        # Calculate class weights and combine with sample weights
-        class_counts = np.bincount(y_seq)
-        total = len(y_seq)
-        class_weight_0 = total / (2 * class_counts[0])
-        class_weight_1 = total / (2 * class_counts[1])
-
-        # Combine class weights with sample weights
-        # Apply class weight based on each sample's label
-        combined_weights = weights_seq.copy()
-        for i in range(len(y_seq)):
-            if y_seq[i] == 0:
-                combined_weights[i] *= class_weight_0
-            else:
-                combined_weights[i] *= class_weight_1
-
-        # Normalize combined weights
-        combined_weights = combined_weights * (len(combined_weights) / combined_weights.sum())
-
-        print(f"✓ Combined weights applied (class balance + recency)")
-        print(f"   Final weight range: {combined_weights.min():.2f} - {combined_weights.max():.2f}")
-
-        # Callbacks
+        # Train with Early Stopping
         from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
         callbacks = [
-            EarlyStopping(monitor='loss', patience=10, restore_best_weights=True, verbose=1),
-            ReduceLROnPlateau(monitor='loss', factor=0.5, patience=5, min_lr=1e-6, verbose=1)
+            EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True, verbose=0),
+            ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, verbose=0)
         ]
 
-        # Train with combined weights (NO class_weight parameter)
         history = self.model.model.fit(
-            X_seq, y_seq,
-            epochs=100,
+            X_train_seq, y_train_seq,
+            validation_data=(X_val_seq, y_val_seq),
+            epochs=50,
             batch_size=32,
-            verbose=1,
-            callbacks=callbacks,
-            sample_weight=combined_weights  # Combined class + recency weights!
+            verbose=0,  # Silent training
+            sample_weight=w_train_seq
         )
 
-        print_section("TRAINING COMPLETE")
+        # Find the absolute best epoch
+        val_loss_history = history.history['val_loss']
+        best_epoch = np.argmin(val_loss_history) + 1
+        print(f"✅ Optimal stopping point found: Epoch {best_epoch} (Val Loss: {min(val_loss_history):.4f})")
 
-        return X_scaled, y_seq
+        # ====================================================================
+        # PASS 2: Train on EVERYTHING (The "Real Run")
+        # ====================================================================
+        print(f"\n🚀 PASS 2: Retraining on 100% data for {best_epoch} epochs...")
+
+        # 1. Re-Initialize Scaler on ALL data (Now safe, because we already decided epochs)
+        self.scaler = RobustScaler()
+        X_all_scaled = self.scaler.fit_transform(X_all)
+
+        # 2. Prepare Sequences on ALL data
+        # Note: We pass 'is_training=True' so it calculates weights for the WHOLE set
+        X_final, y_final, w_final = self._prepare_sequences(
+            X_all, y_all, self.scaler, is_training=True, pre_scaled_data=X_all_scaled
+        )
+
+        # 3. Re-Build a Fresh Model
+        self.model.build_model((X_final.shape[1], X_final.shape[2]))
+
+        # 4. Train for EXACTLY best_epoch (No validation needed now)
+        self.model.model.fit(
+            X_final, y_final,
+            epochs=best_epoch,  # Stop exactly where Pass 1 said was best
+            batch_size=32,
+            verbose=1,
+            sample_weight=w_final
+        )
+
+        print_section("PRODUCTION MODEL READY")
+        return X_all_scaled, y_all
+
+    def _prepare_sequences(self, X_raw, y_raw, scaler, is_training=True, pre_scaled_data=None):
+        """Helper to generate sequences and weights"""
+
+        # Scale if not already scaled
+        if pre_scaled_data is None:
+            X_scaled = scaler.transform(X_raw)
+        else:
+            X_scaled = pre_scaled_data
+
+        X_seq, y_seq, weights = [], [], []
+
+        # Calculate weights if this is a training set
+        if is_training:
+            raw_weights = calculate_sample_weights(
+                len(X_scaled),
+                recent_weeks=self.config.RECENT_WEEKS_EMPHASIZED,
+                weight_multiplier=self.config.RECENT_DATA_WEIGHT
+            )
+
+        start_idx = self.config.LOOKBACK_MEDIUM
+
+        for i in range(start_idx, len(X_scaled)):
+            X_seq.append(X_scaled[i - start_idx:i])
+            y_seq.append(y_raw[i])
+
+            if is_training:
+                weights.append(raw_weights[i])
+            else:
+                weights.append(1.0)  # Validation data gets standard weight
+
+        # Handle Class Balancing (Only if training)
+        X_arr = np.array(X_seq)
+        y_arr = np.array(y_seq)
+        w_arr = np.array(weights)
+
+        if is_training and len(y_arr) > 0:
+            class_counts = np.bincount(y_arr)
+            # Avoid division by zero
+            c0 = class_counts[0] if class_counts[0] > 0 else 1
+            c1 = class_counts[1] if len(class_counts) > 1 and class_counts[1] > 0 else 1
+
+            total = len(y_arr)
+            w0 = total / (2 * c0)
+            w1 = total / (2 * c1)
+
+            # Apply class weights
+            for i in range(len(y_arr)):
+                w_arr[i] *= (w0 if y_arr[i] == 0 else w1)
+
+            # Normalize
+            w_arr = w_arr * (len(w_arr) / w_arr.sum())
+
+        return X_arr, y_arr, w_arr
 
     def predict_next(self, df, X_scaled):
         """
@@ -580,12 +614,6 @@ class StockPredictionApp:
 
 def main():
     """Main function with user interface"""
-
-    print_header("🚀 STOCK PREDICTION SYSTEM - PRODUCTION VERSION", "=")
-    print("Hybrid Weighted Strategy | Real-Time Predictions")
-    print("=" * 70)
-
-    # Get API key
     try:
         api_key = GEMINI_API_KEY
     except ImportError:
