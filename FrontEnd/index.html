@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockHarvest AI | Terminal Login</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="d-flex align-items-center justify-content-center vh-100 overflow-hidden">
+
+    <div class="number-bg">
+        <span style="--speed:1.2;">123456789012345678901234567890</span>
+        <span style="--speed:0.8;">123456789012345678901234567890</span>
+        <span style="--speed:1.2;">123456789012345678901234567890</span>
+        <span style="--speed:0.8;">123456789012345678901234567890</span>
+        <span style="--speed:1.2;">123456789012345678901234567890</span>
+        <span style="--speed:0.8;">123456789012345678901234567890</span>
+        <span style="--speed:0.8;">123456789012345678901234567890</span>
+        <span style="--speed:0.8;">123456789012345678901234567890</span>
+        <span style="--speed:0.8;">123456789012345678901234567890</span>
+    </div>
+
+    <div class="container-fluid z-3">
+        <div class="row justify-content-center">
+            <div class="login-wrapper">
+                <div class="login-card text-center">
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
+                            <div class="logo-box-mini"></div>
+                            <h1 class="brand-name">STOCKHARVEST <span class="text-primary">AI</span></h1>
+                        </div>
+                        <h2 class="terminal-title">Terminal Login</h2>
+                    </div>
+
+                    <div id="googleBtnContainer" class="mb-4 d-flex justify-content-center"></div>
+
+                    <div class="divider mb-4"><span>OR EMAIL</span></div>
+
+                    <form id="emailLoginForm" class="text-start" action="dashboard.css">
+                        <div class="mb-3">
+                            <label class="ticker-label">Email Address</label>
+                            <input type="email" class="form-control custom-input" placeholder="name@domain.com" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="ticker-label">Password</label>
+                            <input type="password" class="form-control custom-input" placeholder="••••••••" required>
+                        </div>
+                        <button type="submit" class="main-btn btn btn-primary w-100 fw-bold">LOGIN</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- GOOGLE CONFIGURATION ---
+        // 1. You MUST replace this with your ID from Google Cloud Console
+        const GOOGLE_CLIENT_ID = "898161283266-gb6o2bnd57002m4cp1bet24ci9oefe37.apps.googleusercontent.com";
+
+        function handleCredentialResponse(response) {
+            // This runs after successful login
+            console.log("Google Login Successful");
+            window.location.href = 'dashboard.html';
+        }
+
+        window.onload = function () {
+            if (GOOGLE_CLIENT_ID === "YOUR_CLIENT_ID.apps.googleusercontent.com") {
+                console.warn("Google Login won't work until you add your real Client ID!");
+            }
+
+            // 2. Initialize the Google client
+            google.accounts.id.initialize({
+                client_id: GOOGLE_CLIENT_ID,
+                callback: handleCredentialResponse,
+                ux_mode: "popup" // Forces a popup window
+            });
+
+            // 3. Render the official button into our container
+            google.accounts.id.renderButton(
+                document.getElementById("googleBtnContainer"),
+                {
+                    theme: "outline",
+                    size: "large",
+                    width: 340, // Adjust width to match your card
+                    text: "continue_with"
+                }
+            );
+
+            // Optional: Show the 'One Tap' prompt automatically
+            google.accounts.id.prompt();
+        };
+
+        // --- EMAIL LOGIN REDIRECT ---
+        document.getElementById('emailLoginForm').onsubmit = (e) => {
+            e.preventDefault();
+            window.location.href = 'dashboard.html';
+        };
+    </script>
+</body>
+</html>

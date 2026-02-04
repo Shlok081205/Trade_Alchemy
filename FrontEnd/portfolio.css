@@ -1,0 +1,112 @@
+/* Global Reset */
+body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: linear-gradient(rgba(10, 15, 30, 0.92), rgba(10, 15, 30, 0.92)),
+                url('stock_image.jpg') no-repeat center center fixed;
+    background-size: cover;
+    color: #ffffff;
+    min-height: 100vh;
+}
+
+/* Navbar Theme */
+.nse-navbar {
+    background-color: #0b111e;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}
+
+.logo-square {
+    width: 24px;
+    height: 24px;
+    background-color: #5d78ff;
+    border-radius: 4px;
+}
+
+.text-primary-ai { color: #3b82f6 !important; }
+.text-success-ai { color: #10b981 !important; }
+.text-danger-ai { color: #ef4444 !important; }
+
+/* Search & Acc Button */
+.search-container input {
+    background-color: #161e2e;
+    border: 1px solid #2d3748;
+    color: white;
+    border-right: none;
+}
+
+.btn-search {
+    background-color: #3b82f6;
+    border: 1px solid #3b82f6;
+    color: white;
+}
+
+.btn-account {
+    border-radius: 4px;
+    padding: 6px 16px;
+    font-size: 0.85rem;
+}
+
+/* Nav Link Highlights - Matching Photo */
+.nav-bottom .nav-link {
+    color: #94a3b8;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 12px 15px;
+    letter-spacing: 0.5px;
+}
+
+.nav-bottom .nav-link.active {
+    color: white;
+    border-bottom: 2px solid white; /* Exact highlight from image */
+}
+
+/* Ticker Tape Styling */
+.ticker-wrapper {
+    background-color: #000000;
+    overflow: hidden;
+}
+
+.ticker-content {
+    display: flex;
+    white-space: nowrap;
+    animation: scrollTicker 30s linear infinite;
+}
+
+@keyframes scrollTicker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+
+.ticker-item {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0 30px;
+}
+
+/* Glassmorphism Cards */
+.card {
+    background: rgba(22, 30, 46, 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.side-nav .list-group-item {
+    background: rgba(22, 30, 46, 0.6);
+    color: #cbd5e1;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.85rem;
+}
+
+.side-nav .list-group-item.active {
+    background-color: #1d7af3 !important;
+    border-color: #1d7af3;
+}
+
+/* Market Status Dot */
+.status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: #10b981;
+    border-radius: 50%;
+    margin-right: 2px;
+}

@@ -1,664 +1,191 @@
-"""
-Production Stock Prediction System
-====================================
-Hybrid Weighted Strategy with Real-Time Predictions
-
-Features:
-- Trains on ALL historical data (no artificial test split)
-- Uses Hybrid weighting (2x for recent 10 weeks)
-- Real-time prediction after training
-- Multi-ticker correlation analysis
-- User-friendly interface
-"""
-
 import json
 import numpy as np
 import pandas as pd
 from datetime import datetime
 import warnings
+import tensorflow as tf
+from sklearn.preprocessing import RobustScaler
 
 warnings.filterwarnings('ignore')
+tf.keras.backend.clear_session()
 
 # Import custom modules
 from AccountServices import PortfolioRiskManager
-from Machine_Learning import MultiTimeframeLSTM, ConfidenceFilter, FeatureCalculator
+from Machine_Learning import MultiTimeframeLSTM, FeatureCalculator
 from Web_Scraping import YahooScraper, Gemini
 from Web_Scraping.config_setup import GEMINI_API_KEY
-
-import tensorflow as tf
-
-tf.keras.backend.clear_session()
-
 
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
 
 class Config:
-    """Configuration class for the prediction system"""
-
-    # Model Parameters
     LOOKBACK_SHORT = 20
     LOOKBACK_MEDIUM = 40
     LOOKBACK_LONG = 60
-
-    # Hybrid Strategy Parameters
     RECENT_DATA_WEIGHT = 3.5
     RECENT_WEEKS_EMPHASIZED = 12
-
-    # Trading Parameters
-    THRESHOLD = 0.002  # 0.2% price movement threshold
-    MIN_CONFIDENCE = 0.55  # Minimum confidence to trade
-
-    # Risk Management
+    MIN_CONFIDENCE = 0.55
     INITIAL_CAPITAL = 100000
     MAX_POSITION_SIZE = 0.25
     MAX_PORTFOLIO_RISK = 0.02
-
-    # Data Requirements
-    MIN_DAYS_REQUIRED = 200  # Minimum data for training
-
+    MIN_DAYS_REQUIRED = 200
 
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
-def print_header(text, char="=", width=70):
-    """Print formatted header"""
-    print(f"\n{char * width}")
-    print(f"  {text}")
-    print(f"{char * width}\n")
+def print_header(text, char="="):
+    print(f"\n{char * 70}\n  {text}\n{char * 70}\n")
 
-
-def print_section(text, char="-", width=70):
-    """Print formatted section"""
-    print(f"\n{char * width}")
-    print(f"  {text}")
-    print(f"{char * width}\n")
-
-
-def calculate_sample_weights(train_size, recent_weeks=10, weight_multiplier=2.0):
-    """
-    Calculate sample weights for hybrid strategy
-
-    Args:
-        train_size: Number of training samples
-        recent_weeks: Number of recent weeks to emphasize
-        weight_multiplier: Weight multiplier for recent data
-
-    Returns:
-        Array of sample weights
-    """
+def calculate_sample_weights(train_size, recent_weeks=12, weight_multiplier=3.5):
     weights = np.ones(train_size)
-
-    if train_size < 50:
-        return weights
-
-    # Calculate cutoff for "recent" data
-    recent_days = recent_weeks * 5  # 5 trading days per week
+    recent_days = recent_weeks * 5
     recent_cutoff = max(0, train_size - recent_days)
-
-    # Apply higher weight to recent data
     weights[recent_cutoff:] = weight_multiplier
-
-    # Smooth transition with gradual decay
-    decay_window = min(50, recent_cutoff)
-    if decay_window > 0 and recent_cutoff > decay_window:
-        decay_start = recent_cutoff - decay_window
-        decay_weights = np.linspace(1.0, weight_multiplier, decay_window)
-        weights[decay_start:recent_cutoff] = decay_weights
-
-    # Normalize weights
-    weights = weights * (train_size / weights.sum())
-
-    return weights
-
+    return weights * (train_size / weights.sum())
 
 # ============================================================================
 # DATA COLLECTION MODULE
 # ============================================================================
 
 class DataCollector:
-    """Handles data collection from Yahoo Finance and Gemini"""
-
     def __init__(self, gemini_api_key):
         self.ys = YahooScraper()
         self.gem = Gemini()
         self.gemini_api_key = gemini_api_key
         self.fc = FeatureCalculator()
 
-    def get_related_tickers(self, ticker):
-        """
-        Get related tickers (partners, peers, sectoral index) using Gemini
-        """
-        print(f"🔍 Analyzing {ticker} to find related companies...")
-
+    def get_market_context(self, ticker):
+        """Fetches peers and regime from Gemini"""
+        print(f"🔍 Analyzing {ticker} market personality...")
         try:
             response = self.gem.retrive_data(ticker, self.gemini_api_key)
             data = json.loads(response)
 
-            # Extract tickers
             partners = [x['ticker'] for x in data.get("partners", []) if x['ticker'] != 'Private']
             peers = [x['ticker'] for x in data.get("peers", [])]
-            sectoral_index = data.get("sectoral_index", "")
-            market_index = data.get("market_index", "")
+            regime = data.get("market_regime", "volatile")
 
-            # Use sectoral index if available, otherwise market index
-            index_ticker = sectoral_index if sectoral_index else market_index
+            idx = data.get("sectoral_index") or data.get("market_index")
+            related = list(set(partners + peers))
+            if idx: related.append(idx)
 
-            # Combine all tickers
-            related_tickers = list(set(partners + peers))
-            if index_ticker:
-                related_tickers.append(index_ticker)
+            return related, idx, regime
+        except:
+            return [], None, "volatile"
 
-            print(f"✓ Found {len(partners)} partners, {len(peers)} peers")
-            if sectoral_index:
-                print(f"✓ Sectoral Index: {sectoral_index}")
-            elif market_index:
-                print(f"✓ Market Index: {market_index}")
+    def build_dataset(self, ticker, related, regime):
+        print(f"🔄 Collecting data for {ticker} ({regime.upper()} mode)...")
+        raw = self.ys.scrape(ticker, v8=True, time_range="5y")
+        main_df = self.ys.v8_formatter(raw)
 
-            return related_tickers, index_ticker
+        # Core change: Use Regime-aware Feature Calculation
+        main_df = self.fc.calculate_features(main_df, regime=regime)
 
-        except Exception as e:
-            print(f"⚠ Error getting related tickers: {str(e)}")
-            print("  Continuing with ticker only...")
-            return [], None
+        for rel in related:
+            try:
+                rel_raw = self.ys.scrape(rel, v8=True, time_range="5y")
+                rel_df = self.ys.v8_formatter(rel_raw)
+                if rel_df is not None:
+                    main_df = main_df.join(rel_df[['Close']].rename(columns={'Close': f'{rel}_Close'}), how='left')
+            except: continue
 
-    def fetch_ticker_data(self, ticker, time_range="5y"):
-        """Fetch historical data for a single ticker"""
-        try:
-            raw_data = self.ys.scrape(ticker, use_proxy=True, v8=True, time_range=time_range)
-
-            if raw_data is None or 'v8' not in raw_data:
-                print(f"  ⚠️  {ticker}: No data returned from API")
-                return None
-
-            formatted_data = self.ys.v8_formatter(raw_data)
-
-            if formatted_data is None:
-                print(f"  ⚠️  {ticker}: Failed to format data")
-                return None
-
-            if len(formatted_data) < Config.MIN_DAYS_REQUIRED:
-                print(
-                    f"  ⚠️  {ticker}: Insufficient data ({len(formatted_data)} days, need {Config.MIN_DAYS_REQUIRED})")
-                return None
-
-            return formatted_data
-
-        except Exception as e:
-            print(f"  ✗ {ticker}: {str(e)[:80]}")
-            return None
-
-    def build_feature_dataset(self, main_ticker, related_tickers=None, time_range="5y"):
-        """
-        Build complete feature dataset with main ticker and related tickers
-        """
-        print_section(f"DATA COLLECTION FOR {main_ticker}")
-
-        # Fetch main ticker
-        print(f"Fetching main ticker: {main_ticker}...")
-        main_df = self.fetch_ticker_data(main_ticker, time_range)
-
-        if main_df is None:
-            raise ValueError(f"Failed to fetch data for {main_ticker}")
-
-        print(f"✓ Main ticker: {len(main_df)} days of data")
-
-        # Calculate features for main ticker
-        print(f"Calculating features...")
-        main_df = self.fc.calculate_features(main_df, threshold=Config.THRESHOLD)
-        print(f"✓ Main ticker features: {main_df.shape}")
-
-        # Add related tickers if provided
-        if related_tickers:
-            print(f"\nProcessing {len(related_tickers)} related tickers...")
-
-            successfully_merged = []
-            for related_ticker in related_tickers:
-                try:
-                    related_df = self.fetch_ticker_data(related_ticker, time_range)
-
-                    if related_df is None:
-                        continue
-
-                    # Select essential columns
-                    available_cols = [col for col in ['Close', 'Volume', 'High', 'Low']
-                                      if col in related_df.columns]
-
-                    if not available_cols:
-                        continue
-
-                    related_subset = related_df[available_cols].copy()
-                    related_subset.columns = [f"{related_ticker}_{col}"
-                                              for col in related_subset.columns]
-
-                    # Join to main dataframe
-                    main_df = main_df.join(related_subset, how='left')
-                    successfully_merged.append(related_ticker)
-                    print(f"  ✓ {related_ticker}: {len(available_cols)} features")
-
-                except Exception as e:
-                    print(f"  ✗ {related_ticker}: {str(e)[:50]}")
-                    continue
-
-            if successfully_merged:
-                print(f"\n✓ Successfully merged: {len(successfully_merged)} tickers")
-
-        # Clean data
-        print(f"\n✓ Cleaning missing values...")
-        main_df = main_df.ffill().fillna(0)
-        main_df = main_df.replace([np.inf, -np.inf], 0)
-
-        # Remove NaN in target
-        main_df = main_df.dropna(subset=['Target'])
-
-        print_section("DATA PREPARATION COMPLETE")
-        print(f"Final dataset shape:  {main_df.shape}")
-        print(f"Total features:       {main_df.shape[1]}")
-        print(f"Date range:           {main_df.index[0]} to {main_df.index[-1]}")
-
-        return main_df
-
+        return main_df.ffill().fillna(0).dropna(subset=['Target'])
 
 # ============================================================================
 # PREDICTION ENGINE
 # ============================================================================
 
 class StockPredictor:
-    """Main prediction engine with Hybrid strategy"""
-
-    def __init__(self, config=None):
-        self.config = config or Config()
+    def __init__(self):
+        self.config = Config()
         self.model = None
-        self.scaler = None
+        self.scaler = RobustScaler()
+        self.val_accuracy = 0.0
 
-    def train_with_hybrid_weights(self, df):
-        """
-        Two-Pass Production Training:
-        1. Train on Split Data -> Find optimal Epochs
-        2. Retrain on ALL Data -> Maximize Recency
-        """
-        print_section("TRAINING MODEL - PRODUCTION MODE")
+    def _prepare_sequences(self, X_scaled, y_raw, is_training=True):
+        X_seq, y_seq, weights = [], [], []
+        raw_weights = calculate_sample_weights(len(X_scaled))
 
-        if len(df) < self.config.LOOKBACK_LONG + 50:
-            raise ValueError(f"Insufficient data. Need at least {self.config.LOOKBACK_LONG + 50} days")
+        for i in range(self.config.LOOKBACK_MEDIUM, len(X_scaled)):
+            X_seq.append(X_scaled[i-self.config.LOOKBACK_MEDIUM:i])
+            y_seq.append(y_raw[i])
+            weights.append(raw_weights[i] if is_training else 1.0)
 
-        # 1. Prepare ALL Data
+        return np.array(X_seq), np.array(y_seq), np.array(weights)
+
+    def train_production_model(self, df):
         y_all = df['Target'].values
         X_all = df.drop(['Target', 'AdjClose', 'Next_Ret'], axis=1, errors='ignore').values
 
-        # Cleaning
-        if np.any(np.isnan(X_all)):
-            X_all = np.nan_to_num(X_all, nan=0.0)
+        # PASS 1: Validation and Epoch Tuning
+        split = int(len(X_all) * 0.85)
+        self.scaler.fit(X_all[:split])
+        X_train_seq, y_train_seq, w_train_seq = self._prepare_sequences(self.scaler.transform(X_all[:split]), y_all[:split])
+        X_val_seq, y_val_seq, _ = self._prepare_sequences(self.scaler.transform(X_all[split:]), y_all[split:], False)
 
-        # ====================================================================
-        # PASS 1: Find Optimal Training Length (The "Safety Check")
-        # ====================================================================
-        print("🔍 PASS 1: Determining optimal training duration...")
-
-        # Split 85/15 just to find the stopping point
-        split_idx = int(len(X_all) * 0.85)
-        X_train_raw = X_all[:split_idx]
-        X_val_raw = X_all[split_idx:]
-
-        # Fit Scaler on TRAIN only (for Pass 1)
-        from sklearn.preprocessing import RobustScaler
-        temp_scaler = RobustScaler()
-        temp_scaler.fit(X_train_raw)
-
-        # Prepare Sequences for Pass 1
-        X_train_seq, y_train_seq, w_train_seq = self._prepare_sequences(
-            X_train_raw, y_all[:split_idx], temp_scaler, is_training=True
-        )
-        X_val_seq, y_val_seq, _ = self._prepare_sequences(
-            X_val_raw, y_all[split_idx:], temp_scaler, is_training=False
-        )
-
-        # Initialize Temp Model
-        self.model = MultiTimeframeLSTM(
-            lookback_short=self.config.LOOKBACK_SHORT,
-            lookback_medium=self.config.LOOKBACK_MEDIUM,
-            lookback_long=self.config.LOOKBACK_LONG
-        )
+        self.model = MultiTimeframeLSTM()
         self.model.build_model((X_train_seq.shape[1], X_train_seq.shape[2]))
 
-        # Train with Early Stopping
-        from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
-        callbacks = [
-            EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True, verbose=0),
-            ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, verbose=0)
-        ]
-
+        print("🔍 PASS 1: Tuning model...")
         history = self.model.model.fit(
-            X_train_seq, y_train_seq,
-            validation_data=(X_val_seq, y_val_seq),
-            epochs=50,
-            batch_size=32,
-            verbose=0,  # Silent training
-            sample_weight=w_train_seq
+            X_train_seq, y_train_seq, validation_data=(X_val_seq, y_val_seq),
+            epochs=40, verbose=0, sample_weight=w_train_seq
         )
 
-        # Find the absolute best epoch
-        val_loss_history = history.history['val_loss']
-        best_epoch = np.argmin(val_loss_history) + 1
-        print(f"✅ Optimal stopping point found: Epoch {best_epoch} (Val Loss: {min(val_loss_history):.4f})")
+        best_epoch = np.argmin(history.history['val_loss']) + 1
+        self.val_accuracy = history.history['val_accuracy'][best_epoch-1] * 100
 
-        # ====================================================================
-        # PASS 2: Train on EVERYTHING (The "Real Run")
-        # ====================================================================
-        print(f"\n🚀 PASS 2: Retraining on 100% data for {best_epoch} epochs...")
+        # PASS 2: Retrain on Full Data
+        print(f"🚀 PASS 2: Retraining (Epochs: {best_epoch})...")
+        X_full_scaled = self.scaler.fit_transform(X_all)
+        X_f, y_f, w_f = self._prepare_sequences(X_full_scaled, y_all)
+        self.model.build_model((X_f.shape[1], X_f.shape[2]))
+        self.model.model.fit(X_f, y_f, epochs=best_epoch, verbose=1, sample_weight=w_f)
 
-        # 1. Re-Initialize Scaler on ALL data (Now safe, because we already decided epochs)
-        self.scaler = RobustScaler()
-        X_all_scaled = self.scaler.fit_transform(X_all)
-
-        # 2. Prepare Sequences on ALL data
-        # Note: We pass 'is_training=True' so it calculates weights for the WHOLE set
-        X_final, y_final, w_final = self._prepare_sequences(
-            X_all, y_all, self.scaler, is_training=True, pre_scaled_data=X_all_scaled
-        )
-
-        # 3. Re-Build a Fresh Model
-        self.model.build_model((X_final.shape[1], X_final.shape[2]))
-
-        # 4. Train for EXACTLY best_epoch (No validation needed now)
-        self.model.model.fit(
-            X_final, y_final,
-            epochs=best_epoch,  # Stop exactly where Pass 1 said was best
-            batch_size=32,
-            verbose=1,
-            sample_weight=w_final
-        )
-
-        print_section("PRODUCTION MODEL READY")
-        return X_all_scaled, y_all
-
-    def _prepare_sequences(self, X_raw, y_raw, scaler, is_training=True, pre_scaled_data=None):
-        """Helper to generate sequences and weights"""
-
-        # Scale if not already scaled
-        if pre_scaled_data is None:
-            X_scaled = scaler.transform(X_raw)
-        else:
-            X_scaled = pre_scaled_data
-
-        X_seq, y_seq, weights = [], [], []
-
-        # Calculate weights if this is a training set
-        if is_training:
-            raw_weights = calculate_sample_weights(
-                len(X_scaled),
-                recent_weeks=self.config.RECENT_WEEKS_EMPHASIZED,
-                weight_multiplier=self.config.RECENT_DATA_WEIGHT
-            )
-
-        start_idx = self.config.LOOKBACK_MEDIUM
-
-        for i in range(start_idx, len(X_scaled)):
-            X_seq.append(X_scaled[i - start_idx:i])
-            y_seq.append(y_raw[i])
-
-            if is_training:
-                weights.append(raw_weights[i])
-            else:
-                weights.append(1.0)  # Validation data gets standard weight
-
-        # Handle Class Balancing (Only if training)
-        X_arr = np.array(X_seq)
-        y_arr = np.array(y_seq)
-        w_arr = np.array(weights)
-
-        if is_training and len(y_arr) > 0:
-            class_counts = np.bincount(y_arr)
-            # Avoid division by zero
-            c0 = class_counts[0] if class_counts[0] > 0 else 1
-            c1 = class_counts[1] if len(class_counts) > 1 and class_counts[1] > 0 else 1
-
-            total = len(y_arr)
-            w0 = total / (2 * c0)
-            w1 = total / (2 * c1)
-
-            # Apply class weights
-            for i in range(len(y_arr)):
-                w_arr[i] *= (w0 if y_arr[i] == 0 else w1)
-
-            # Normalize
-            w_arr = w_arr * (len(w_arr) / w_arr.sum())
-
-        return X_arr, y_arr, w_arr
-
-    def predict_next(self, df, X_scaled):
-        """
-        Predict next day's movement
-        """
-        # Get last sequence
-        last_seq = X_scaled[-self.config.LOOKBACK_MEDIUM:].reshape(
-            1, self.config.LOOKBACK_MEDIUM, X_scaled.shape[1]
-        )
-
-        # Predict
-        prob = self.model.model.predict(last_seq, verbose=0)[0][0]
-
-        # Determine direction
-        direction = 'UP' if prob > 0.5 else 'DOWN'
-        confidence = prob if prob > 0.5 else 1 - prob
-
-        return {
-            'direction': direction,
-            'probability': float(prob),
-            'confidence': float(confidence),
-            'signal_strength': 'STRONG' if confidence > 0.65 else 'MODERATE' if confidence > 0.55 else 'WEAK'
-        }
-
+        return X_full_scaled
 
 # ============================================================================
-# MAIN APPLICATION
+# MAIN APP
 # ============================================================================
 
 class StockPredictionApp:
-    """Main application class"""
-
-    def __init__(self, gemini_api_key):
-        self.gemini_api_key = gemini_api_key
-        self.data_collector = DataCollector(gemini_api_key)
+    def __init__(self):
+        self.collector = DataCollector(GEMINI_API_KEY)
         self.predictor = StockPredictor()
-        self.portfolio_manager = PortfolioRiskManager(
-            initial_capital=Config.INITIAL_CAPITAL,
-            max_position_size=Config.MAX_POSITION_SIZE,
-            max_portfolio_risk=Config.MAX_PORTFOLIO_RISK
-        )
+        self.risk = PortfolioRiskManager(Config.INITIAL_CAPITAL)
 
-    def analyze_ticker(self, ticker, use_related_tickers=True):
-        """
-        Complete analysis pipeline for a ticker
-        """
-        try:
-            print_header(f"STOCK PREDICTION SYSTEM - {ticker}")
-            print(
-                f"Strategy: Hybrid Weighted (Recent {Config.RECENT_WEEKS_EMPHASIZED} weeks @ {Config.RECENT_DATA_WEIGHT}x)")
-            print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    def run(self, ticker):
+        related, idx, regime = self.collector.get_market_context(ticker)
+        df = self.collector.build_dataset(ticker, related, regime)
 
-            # Step 1: Get related tickers
-            related_tickers = []
-            index_ticker = None
+        X_scaled = self.predictor.train_production_model(df)
 
-            if use_related_tickers:
-                related_tickers, index_ticker = self.data_collector.get_related_tickers(ticker)
+        # Last Sequence Prediction
+        last_seq = X_scaled[-Config.LOOKBACK_MEDIUM:].reshape(1, Config.LOOKBACK_MEDIUM, -1)
+        prob = self.predictor.model.model.predict(last_seq, verbose=0)[0][0]
 
-            # Step 2: Fetch and prepare data
-            main_df = self.data_collector.build_feature_dataset(
-                ticker,
-                related_tickers=related_tickers if use_related_tickers else None,
-                time_range="5y"
-            )
+        # Sizing and Display
+        price = df['AdjClose'].iloc[-1]
+        vol = (df['ATR'].iloc[-1] / price)
+        conf = prob if prob > 0.5 else 1 - prob
 
-            # Get current price info
-            current_price = main_df['AdjClose'].iloc[-1] if 'AdjClose' in main_df.columns else None
-            current_date = main_df.index[-1]
+        print_header(f"RESULTS FOR {ticker}")
+        print(f"🌡️  Market Regime:    {regime.upper()}")
+        print(f"🎯 Model Accuracy:   {self.predictor.val_accuracy:.2f}%")
+        print(f"📈 Direction:        {'UP 🟢' if prob > 0.5 else 'DOWN 🔴'}")
+        print(f"🤝 Confidence:       {conf:.2%}")
 
-            # Step 3: Train model
-            X_scaled, y_seq = self.predictor.train_with_hybrid_weights(main_df)
-
-            # Step 4: Make prediction
-            print_section("GENERATING PREDICTION")
-            prediction = self.predictor.predict_next(main_df, X_scaled)
-
-            # Step 5: Calculate position sizing
-            volatility = main_df['ATR'].iloc[-1] / current_price if 'ATR' in main_df.columns else 0.02
-
-            trade_recommendation = None
-            if prediction['confidence'] >= Config.MIN_CONFIDENCE:
-                shares = self.portfolio_manager.calculate_position_size(
-                    ticker,
-                    prediction['confidence'],
-                    volatility,
-                    current_price
-                )
-
-                position_value = shares * current_price
-                position_weight = position_value / Config.INITIAL_CAPITAL * 100
-
-                trade_recommendation = {
-                    'action': 'BUY' if prediction['direction'] == 'UP' else 'SELL',
-                    'shares': shares,
-                    'position_value': position_value,
-                    'position_weight': position_weight
-                }
-
-            # Step 6: Display results
-            self._display_results(
-                ticker,
-                current_date,
-                current_price,
-                volatility,
-                prediction,
-                trade_recommendation,
-                main_df,
-                related_tickers,
-                index_ticker
-            )
-
-            return {
-                'ticker': ticker,
-                'date': current_date,
-                'price': current_price,
-                'prediction': prediction,
-                'trade': trade_recommendation,
-                'success': True
-            }
-
-        except Exception as e:
-            print(f"\n❌ ERROR: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return {
-                'ticker': ticker,
-                'success': False,
-                'error': str(e)
-            }
-
-    def _display_results(self, ticker, date, price, volatility, prediction,
-                         trade, df, related_tickers, index_ticker):
-        """Display prediction results"""
-
-        print_header("PREDICTION RESULTS", "=")
-
-        # Basic Info
-        print(f"📊 Ticker:               {ticker}")
-        print(f"📅 Latest Date:          {date}")
-        print(f"💵 Current Price:        ${price:.2f}")
-        print(f"📈 Volatility (ATR/Price): {volatility:.2%}")
-
-        # Prediction
-        print(f"\n🎯 PREDICTION FOR NEXT TRADING DAY:")
-        print(f"   Direction:            {prediction['direction']} {'🟢' if prediction['direction'] == 'UP' else '🔴'}")
-        print(f"   Confidence:           {prediction['confidence']:.2%}")
-        print(f"   Signal Strength:      {prediction['signal_strength']}")
-        print(f"   Probability:          {prediction['probability']:.2%}")
-
-        # Trade Recommendation
-        if trade:
-            print(f"\n💼 TRADE RECOMMENDATION:")
-            print(f"   Action:               {trade['action']}")
-            print(f"   Shares:               {trade['shares']}")
-            print(f"   Position Value:       ${trade['position_value']:,.2f}")
-            print(f"   Portfolio Weight:     {trade['position_weight']:.1f}%")
+        if conf >= Config.MIN_CONFIDENCE:
+            shares = self.risk.calculate_position_size(ticker, conf, vol, price)
+            print(f"💼 Recommendation:   BUY {shares} shares (${shares*price:,.2f})")
         else:
-            print(f"\n⚠️  NO TRADE RECOMMENDED")
-            print(
-                f"   Reason: Confidence ({prediction['confidence']:.1%}) below threshold ({Config.MIN_CONFIDENCE:.1%})")
-
-        # Model Info
-        print(f"\n🤖 MODEL INFORMATION:")
-        print(f"   Strategy:             Hybrid Weighted")
-        print(f"   Training Data:        {len(df)} days")
-        print(f"   Features Used:        {df.shape[1]}")
-        print(f"   Recent Weight:        {Config.RECENT_DATA_WEIGHT}x for last {Config.RECENT_WEEKS_EMPHASIZED} weeks")
-
-        if related_tickers or index_ticker:
-            print(f"\n🔗 CORRELATION DATA:")
-            if related_tickers:
-                print(f"   Related Tickers:      {', '.join(related_tickers[:5])}")
-                if len(related_tickers) > 5:
-                    print(f"                         + {len(related_tickers) - 5} more")
-            if index_ticker:
-                print(f"   Benchmark Index:      {index_ticker}")
-
-        print("\n" + "=" * 70 + "\n")
-
-
-# ============================================================================
-# USER INTERFACE
-# ============================================================================
-
-def main():
-    """Main function with user interface"""
-    try:
-        api_key = GEMINI_API_KEY
-    except ImportError:
-        print("⚠️  config_setup.py not found. Please enter API key manually.")
-        api_key = input("Enter Gemini API Key: ").strip()
-
-    # Initialize app
-    app = StockPredictionApp(api_key)
-
-    # Main loop
-    while True:
-        print("\n" + "=" * 70)
-        ticker = input("📈 Enter stock ticker (or 'quit' to exit): ").strip().upper()
-
-        if ticker in ['QUIT', 'EXIT', 'Q']:
-            print("\n👋 Thank you for using Stock Prediction System!")
-            break
-
-        if not ticker:
-            print("⚠️  Please enter a valid ticker symbol")
-            continue
-
-        # Ask about related tickers
-        use_related = input("🔗 Include related tickers for correlation analysis? (Y/n): ").strip().lower()
-        use_related_tickers = use_related != 'n'
-
-        # Run analysis
-        print("\n🔄 Starting analysis...")
-        result = app.analyze_ticker(ticker, use_related_tickers=use_related_tickers)
-
-        if result['success']:
-            # Ask if user wants to continue
-            continue_input = input("\n📊 Analyze another ticker? (Y/n): ").strip().lower()
-            if continue_input == 'n':
-                print("\n👋 Thank you for using Stock Prediction System!")
-                break
-        else:
-            retry = input("\n⚠️  Analysis failed. Try another ticker? (Y/n): ").strip().lower()
-            if retry == 'n':
-                break
-
-    print("\n" + "=" * 70)
-    print("Session ended at:", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-    print("=" * 70 + "\n")
-
+            print("⚠️  Recommendation:   NO TRADE (Low Confidence)")
 
 if __name__ == "__main__":
-    main()
+    app = StockPredictionApp()
+    while True:
+        symbol = input("\n📈 Enter Ticker (or 'q'): ").strip().upper()
+        if symbol == 'Q': break
+        app.run(symbol)

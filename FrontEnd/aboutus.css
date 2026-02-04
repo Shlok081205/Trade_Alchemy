@@ -1,0 +1,142 @@
+:root {
+    --bg-dark: #0a0e14;
+    --card-bg: rgba(17, 24, 39, 0.88); /* Adjusted for better visibility of the stock_image */
+    --accent-blue: #3b82f6;
+}
+
+body {
+    background-color: var(--bg-dark);
+    /* Image background with a dark overlay to maintain text contrast */
+    background: linear-gradient(rgba(10, 14, 20, 0.85), rgba(10, 14, 20, 0.95)),
+                url('stock_image.jpg');
+    background-size: cover;
+    background-attachment: fixed;
+    background-position: center;
+    color: white;
+    font-family: 'Inter', sans-serif;
+}
+
+/* Header & Nav */
+.header-main {
+    background-color: rgba(10, 14, 20, 0.98);
+    backdrop-filter: blur(12px);
+    z-index: 1050;
+}
+
+.sub-nav {
+    background-color: rgba(13, 18, 27, 0.95);
+}
+
+.logo-box {
+    width: 24px;
+    height: 24px;
+    background: linear-gradient(to top right, #2563eb, #818cf8);
+    border-radius: 4px;
+}
+
+.nav-link-custom {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: #9ca3af;
+    text-transform: uppercase;
+    text-decoration: none;
+    padding-bottom: 4px;
+    border-bottom: 2px solid transparent;
+    transition: 0.2s ease-in-out;
+}
+
+.nav-link-custom:hover, .nav-link-custom.active {
+    color: var(--accent-blue);
+    border-bottom-color: var(--accent-blue);
+}
+
+/* Search Bar */
+.search-container {
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 4px;
+}
+
+.search-container input::placeholder {
+    color: #4b5563;
+}
+
+/* Ticker Tape */
+.ticker-wrapper {
+    background: rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(5px);
+}
+
+.ticker-content {
+    display: flex;
+    white-space: nowrap;
+    animation: tickerLoop 40s linear infinite;
+}
+
+@keyframes tickerLoop {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+
+.ticker-item {
+    padding: 0 35px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.up {
+    color: var(--success);
+}
+.down {
+    color: var(--danger);
+}
+
+/* Cards & Modules */
+.glass-card {
+    background: var(--card-bg);
+    border: 1px solid #1f2937;
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+}
+
+.feature-item {
+    background: rgba(17, 24, 39, 0.5);
+    backdrop-filter: blur(5px);
+    transition: transform 0.2s;
+}
+
+.feature-item:hover {
+    transform: translateX(5px);
+    border-color: var(--accent-blue) !important;
+}
+
+.custom-input {
+    background-color: #0a0e14 !important;
+    border: 1px solid #1f2937 !important;
+    color: #d1d5db !important;
+    font-size: 13px;
+}
+
+.custom-input:focus {
+    border-color: var(--accent-blue) !important;
+    box-shadow: none !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #0a0e14;
+}
+::-webkit-scrollbar-thumb {
+    background: #1f2937;
+    border-radius: 4px;
+}
+
+footer {
+    background-color: rgba(10, 14, 20, 0.98);
+}
