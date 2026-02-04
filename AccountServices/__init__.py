@@ -1,1 +1,2 @@
-from AccountServices.Portfolio import PortfolioRiskManager
+from AccountServices.auth import AuthManager
+from AccountServices.watchlist import WatchlistManager
