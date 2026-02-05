@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>About Us | StockHarvest AI</title>
+    <title>StockHarvest AI | Stock Analysis & AI Predictions</title>
+    <link rel="stylesheet" href="landing.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="aboutus.css">
 </head>
 <body>
-
     <!-- Header -->
     <header class="header">
         <div class="header-wrapper">
@@ -34,8 +33,35 @@
         </div>
     </header>
 
-    <!-- Main Content - Empty for now -->
+    <!-- Main Content -->
     <main class="main">
+        <div class="hero-wrapper">
+            <div class="hero">
+                <!-- Large Logo -->
+                <div class="hero-logo">
+                    <div class="hero-logo-icon"></div>
+                    <h1 class="hero-title">StockHarvest<span class="title-accent">AI</span></h1>
+                </div>
+                
+                <!-- Tagline -->
+                <p class="hero-tagline">Stock analysis and AI predictions for investors in India.</p>
+                
+                <!-- Search Box -->
+                <div class="search-wrapper">
+                    <div class="search-box">
+                        <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M9 17A8 8 0 1 0 9 1a8 8 0 0 0 0 16zM18 18l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <input 
+                            type="text" 
+                            class="search-input" 
+                            placeholder="Search by ticker symbol"
+                            autocomplete="off"
+                        >
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- Footer -->
@@ -53,6 +79,5 @@
             </div>
         </div>
     </footer>
-
 </body>
 </html>

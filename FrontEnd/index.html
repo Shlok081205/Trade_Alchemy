@@ -3,100 +3,633 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StockHarvest AI | Terminal Login</title>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <title>StockHarvest AI | Terminal Access</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <style>
+        :root {
+            --primary-blue: #4A90E2;
+            --dark-bg: #1a1d2e;
+            --card-bg: #252838;
+            --input-bg: #2d3142;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a4b8;
+            --border-color: #3a3d4e;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--dark-bg);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Main Container - Split Screen */
+        .main-container {
+            display: flex;
+            width: 100%;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* Left Side - Digital Rain */
+        .left-panel {
+            width: 60%;
+            height: 100%;
+            background: #151825;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Right Side - Forms */
+        .right-panel {
+            width: 40%;
+            height: 100%;
+            background: var(--card-bg);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-left: 2px solid var(--border-color);
+        }
+
+        /* Number Stream Background */
+        .number-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .number-stream {
+            position: absolute;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: 300;
+            color: rgba(255, 255, 255, 0.5);
+            white-space: nowrap;
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            letter-spacing: 2px;
+            animation: fallDown linear forwards;
+            opacity: 0;
+        }
+
+        @keyframes fallDown {
+            0% {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            5% {
+                opacity: 1;
+            }
+            95% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(100vh);
+                opacity: 0;
+            }
+        }
+
+        /* Login Wrapper */
+        .login-wrapper {
+            max-width: 480px;
+            width: 90%;
+            padding: 0 20px;
+        }
+
+        .login-card {
+            background: transparent;
+            border-radius: 0;
+            padding: 40px;
+            box-shadow: none;
+            border: none;
+        }
+
+        /* Logo and Branding */
+        .logo-box-mini {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--primary-blue), #357ABD);
+            border-radius: 6px;
+        }
+
+        .brand-name {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin: 0;
+        }
+
+        .brand-name .text-primary {
+            color: var(--primary-blue) !important;
+        }
+
+        .terminal-title {
+            font-size: 28px;
+            font-weight: 600;
+            margin-top: 8px;
+            color: var(--text-primary);
+        }
+
+        /* Tab Navigation */
+        .tab-navigation {
+            display: flex;
+            gap: 0;
+            margin-bottom: 32px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tab-btn.active {
+            color: var(--text-primary);
+        }
+
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--primary-blue);
+        }
+
+        .tab-btn:hover:not(.active) {
+            color: var(--text-primary);
+        }
+
+        /* Tab Content */
+        .tab-content-item {
+            display: none;
+            opacity: 0;
+        }
+
+        .tab-content-item.active {
+            display: block;
+            animation: smoothFadeIn 0.5s ease forwards;
+        }
+
+        @keyframes smoothFadeIn {
+            0% {
+                opacity: 0;
+                transform: translateY(15px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Form Elements */
+        .ticker-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .custom-input {
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 12px 16px;
+            font-size: 14px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .custom-input:focus {
+            background: var(--input-bg);
+            border-color: var(--primary-blue);
+            color: var(--text-primary);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+        }
+
+        .custom-input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.5;
+        }
+
+        /* Verification/CAPTCHA Box */
+        .verification-box {
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .verification-box .ticker-label {
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+
+        .captcha-display {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 12px 0;
+            padding: 12px;
+            background: rgba(74, 144, 226, 0.1);
+            border-radius: 6px;
+            border: 1px solid rgba(74, 144, 226, 0.2);
+        }
+
+        .captcha-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .captcha-numbers {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--primary-blue);
+            letter-spacing: 2px;
+        }
+
+        .captcha-instruction {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 4px;
+            border-left: 3px solid var(--primary-blue);
+            font-weight: 400;
+        }
+
+        #captchaAnswer {
+            font-size: 14px;
+        }
+
+        /* Main Button */
+        .main-btn {
+            background: var(--primary-blue);
+            border: none;
+            padding: 14px 24px;
+            font-size: 14px;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .main-btn:hover {
+            background: #357ABD;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(74, 144, 226, 0.3);
+        }
+
+        .main-btn:active {
+            transform: translateY(0);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+
+            .left-panel {
+                width: 100%;
+                height: 30%;
+            }
+
+            .right-panel {
+                width: 100%;
+                height: 70%;
+                border-left: none;
+                border-top: 2px solid var(--border-color);
+            }
+
+            .login-card {
+                padding: 30px 24px;
+            }
+
+            .tab-btn {
+                font-size: 14px;
+                padding: 10px 16px;
+            }
+        }
+    </style>
 </head>
-<body class="d-flex align-items-center justify-content-center vh-100 overflow-hidden">
+<body>
 
-    <div class="number-bg">
-        <span style="--speed:1.2;">123456789012345678901234567890</span>
-        <span style="--speed:0.8;">123456789012345678901234567890</span>
-        <span style="--speed:1.2;">123456789012345678901234567890</span>
-        <span style="--speed:0.8;">123456789012345678901234567890</span>
-        <span style="--speed:1.2;">123456789012345678901234567890</span>
-        <span style="--speed:0.8;">123456789012345678901234567890</span>
-        <span style="--speed:0.8;">123456789012345678901234567890</span>
-        <span style="--speed:0.8;">123456789012345678901234567890</span>
-        <span style="--speed:0.8;">123456789012345678901234567890</span>
-    </div>
+    <div class="main-container">
+        <!-- Left Panel - Digital Rain -->
+        <div class="left-panel">
+            <div class="number-bg" id="numberBg"></div>
+        </div>
 
-    <div class="container-fluid z-3">
-        <div class="row justify-content-center">
+        <!-- Right Panel - Forms -->
+        <div class="right-panel">
             <div class="login-wrapper">
                 <div class="login-card text-center">
                     <div class="mb-4">
-                        <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
+                        <div class="d-flex align-items-center justify-content-center gap-2">
                             <div class="logo-box-mini"></div>
                             <h1 class="brand-name">STOCKHARVEST <span class="text-primary">AI</span></h1>
                         </div>
-                        <h2 class="terminal-title">Terminal Login</h2>
                     </div>
 
-                    <div id="googleBtnContainer" class="mb-4 d-flex justify-content-center"></div>
+                    <!-- Tab Navigation -->
+                    <div class="tab-navigation">
+                        <button class="tab-btn active" onclick="switchTab('signin')">Sign In</button>
+                        <button class="tab-btn" onclick="switchTab('signup')">Sign Up</button>
+                    </div>
 
-                    <div class="divider mb-4"><span>OR EMAIL</span></div>
+                    <!-- Sign In Tab -->
+                    <div id="signin-tab" class="tab-content-item active">
+                        <form id="signinForm" class="text-start">
+                            <div class="mb-3">
+                                <label class="ticker-label">Username</label>
+                                <input type="text" class="form-control custom-input" placeholder="Enter your username" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="ticker-label">Password</label>
+                                <input type="password" class="form-control custom-input" placeholder="••••••••" required>
+                            </div>
 
-                    <form id="emailLoginForm" class="text-start" action="dashboard.css">
-                        <div class="mb-3">
-                            <label class="ticker-label">Email Address</label>
-                            <input type="email" class="form-control custom-input" placeholder="name@domain.com" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="ticker-label">Password</label>
-                            <input type="password" class="form-control custom-input" placeholder="••••••••" required>
-                        </div>
-                        <button type="submit" class="main-btn btn btn-primary w-100 fw-bold">LOGIN</button>
-                    </form>
+                            <!-- Spacer to match Sign Up height -->
+                            <div style="height: 160px;"></div>
+
+                            <button type="submit" class="main-btn btn btn-primary w-100 fw-bold">Sign In</button>
+                        </form>
+                    </div>
+
+                    <!-- Sign Up Tab -->
+                    <div id="signup-tab" class="tab-content-item">
+                        <form id="signupForm" class="text-start">
+                            <div class="mb-3">
+                                <label class="ticker-label">Full Name</label>
+                                <input type="text" class="form-control custom-input" id="fullName" placeholder="Enter your full name" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="ticker-label">Email</label>
+                                <input type="email" class="form-control custom-input" id="email" placeholder="name@domain.com" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="ticker-label">Password</label>
+                                <input type="password" class="form-control custom-input" id="password" placeholder="••••••••" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="ticker-label">Confirm Password</label>
+                                <input type="password" class="form-control custom-input" id="confirmPassword" placeholder="••••••••" required>
+                            </div>
+
+                            <!-- Human Verification CAPTCHA -->
+                            <div class="verification-box mb-3">
+                                <label class="ticker-label">Human Verification</label>
+                                <div class="captcha-display">
+                                    <span class="captcha-label">Numbers:</span>
+                                    <span class="captcha-numbers" id="captchaNumbers"></span>
+                                </div>
+                                <div class="captcha-instruction" id="captchaInstruction"></div>
+                                <input type="text" class="form-control custom-input" id="captchaAnswer" placeholder="Your answer" required maxlength="4">
+                            </div>
+
+                            <button type="submit" class="main-btn btn btn-primary w-100 fw-bold">Sign Up</button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // --- GOOGLE CONFIGURATION ---
-        // 1. You MUST replace this with your ID from Google Cloud Console
-        const GOOGLE_CLIENT_ID = "898161283266-gb6o2bnd57002m4cp1bet24ci9oefe37.apps.googleusercontent.com";
+        // --- TAB SWITCHING ---
+        function switchTab(tabName) {
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content-item').forEach(content => content.classList.remove('active'));
 
-        function handleCredentialResponse(response) {
-            // This runs after successful login
-            console.log("Google Login Successful");
-            window.location.href = 'dashboard.html';
+            // Add active class to selected tab
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+
+            // Generate new CAPTCHA when switching to signup tab
+            if (tabName === 'signup') {
+                generateCaptcha();
+            }
         }
 
-        window.onload = function () {
-            if (GOOGLE_CLIENT_ID === "YOUR_CLIENT_ID.apps.googleusercontent.com") {
-                console.warn("Google Login won't work until you add your real Client ID!");
+        // --- CAPTCHA GENERATION AND VALIDATION ---
+        let captchaNumbers = [];
+        let captchaOrder = '';
+        let correctAnswer = '';
+
+        function generateCaptcha() {
+            // Generate 4 random single-digit numbers
+            captchaNumbers = [];
+            for (let i = 0; i < 4; i++) {
+                captchaNumbers.push(Math.floor(Math.random() * 10));
             }
 
-            // 2. Initialize the Google client
-            google.accounts.id.initialize({
-                client_id: GOOGLE_CLIENT_ID,
-                callback: handleCredentialResponse,
-                ux_mode: "popup" // Forces a popup window
-            });
+            // Randomly choose ascending or descending
+            captchaOrder = Math.random() > 0.5 ? 'Ascending' : 'Descending';
 
-            // 3. Render the official button into our container
-            google.accounts.id.renderButton(
-                document.getElementById("googleBtnContainer"),
-                {
-                    theme: "outline",
-                    size: "large",
-                    width: 340, // Adjust width to match your card
-                    text: "continue_with"
+            // Calculate correct answer
+            if (captchaOrder === 'Ascending') {
+                correctAnswer = [...captchaNumbers].sort((a, b) => a - b).join('');
+            } else {
+                correctAnswer = [...captchaNumbers].sort((a, b) => b - a).join('');
+            }
+
+            // Display in UI
+            document.getElementById('captchaNumbers').textContent = captchaNumbers.join(', ');
+            document.getElementById('captchaInstruction').textContent =
+                `Task: Enter these numbers in ${captchaOrder.toUpperCase()} order`;
+
+            // Clear previous answer
+            document.getElementById('captchaAnswer').value = '';
+        }
+
+        function verifyCaptcha() {
+            const userAnswer = document.getElementById('captchaAnswer').value.trim();
+            return userAnswer === correctAnswer;
+        }
+
+        // --- NUMBER STREAM ANIMATION ---
+        const numberBg = document.getElementById('numberBg');
+        const leftPanel = document.querySelector('.left-panel');
+        const streamWidth = 25; // Width of each stream column in pixels
+        let screenWidth = 0;
+        let columnPositions = [];
+        let activeColumns = new Set();
+
+        function updateDimensions() {
+            screenWidth = leftPanel.offsetWidth;
+            // Create fixed column positions for perfectly parallel streams
+            columnPositions = [];
+            const numColumns = Math.floor(screenWidth / streamWidth);
+            for (let i = 0; i < numColumns; i++) {
+                columnPositions.push(i * streamWidth);
+            }
+        }
+
+        function getRandomNumber() {
+            return Math.floor(Math.random() * 10);
+        }
+
+        function generateRandomNumbers(length) {
+            let numbers = '';
+            for (let i = 0; i < length; i++) {
+                numbers += getRandomNumber();
+            }
+            return numbers;
+        }
+
+        function getAvailableColumn() {
+            // Get columns that aren't currently active
+            const availableColumns = columnPositions.filter(pos => !activeColumns.has(pos));
+            if (availableColumns.length === 0) return null;
+
+            // Pick random available column
+            return availableColumns[Math.floor(Math.random() * availableColumns.length)];
+        }
+
+        function createNumberStream() {
+            const columnPos = getAvailableColumn();
+            if (columnPos === null) return; // No available columns
+
+            activeColumns.add(columnPos);
+
+            const stream = document.createElement('div');
+            stream.className = 'number-stream';
+
+            // Random duration (speed)
+            const duration = 8 + Math.random() * 8; // 8-16 seconds
+
+            // Generate random numbers (30-60 digits)
+            const numberCount = 30 + Math.floor(Math.random() * 30);
+            const numbers = generateRandomNumbers(numberCount);
+
+            // Random color selection (red, green, or white)
+            const colors = [
+                'rgba(255, 255, 255, 0.5)', // white
+                'rgba(255, 100, 100, 0.7)', // brighter red
+                'rgba(0, 255, 0, 0.5)'      // green
+            ];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+            stream.textContent = numbers;
+            stream.style.left = columnPos + 'px';
+            stream.style.animationDuration = duration + 's';
+            stream.style.color = randomColor;
+
+            numberBg.appendChild(stream);
+
+            // Remove stream after animation completes
+            setTimeout(() => {
+                stream.remove();
+                activeColumns.delete(columnPos);
+            }, duration * 1000);
+        }
+
+        // Create streams at random intervals
+        function startStreamGeneration() {
+            setInterval(() => {
+                // Random chance to create a new stream
+                if (Math.random() > 0.4) { // 60% chance each interval
+                    createNumberStream();
                 }
-            );
+            }, 400); // Check every 400ms
+        }
 
-            // Optional: Show the 'One Tap' prompt automatically
-            google.accounts.id.prompt();
+        // Initial burst of streams
+        function initializeStreams() {
+            updateDimensions();
+            const initialStreams = Math.floor(columnPositions.length * 0.5); // Start with 50% of columns
+            for (let i = 0; i < initialStreams; i++) {
+                setTimeout(() => {
+                    createNumberStream();
+                }, i * 150); // Stagger initial creation
+            }
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            updateDimensions();
+        });
+
+        // Start the animation
+        window.addEventListener('load', () => {
+            initializeStreams();
+            startStreamGeneration();
+            // Generate initial CAPTCHA for sign up form
+            generateCaptcha();
+        });
+
+        // --- FORM SUBMISSIONS ---
+        document.getElementById('signinForm').onsubmit = (e) => {
+            e.preventDefault();
+            // In future, send data to Flask backend
+            window.location.href = 'landing.html';
         };
 
-        // --- EMAIL LOGIN REDIRECT ---
-        document.getElementById('emailLoginForm').onsubmit = (e) => {
+        document.getElementById('signupForm').onsubmit = (e) => {
             e.preventDefault();
-            window.location.href = 'dashboard.html';
+
+            // Check if passwords match
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (password !== confirmPassword) {
+                alert('❌ Passwords do not match!');
+                return;
+            }
+
+            // Verify CAPTCHA
+            if (!verifyCaptcha()) {
+                alert(`❌ Incorrect! Expected: ${correctAnswer}`);
+                // Generate new CAPTCHA for retry
+                generateCaptcha();
+                return;
+            }
+
+            // If all validations pass
+            alert('✅ Account created successfully!');
+            // In future, send data to Flask backend
+            window.location.href = 'landing.html';
         };
     </script>
 </body>
