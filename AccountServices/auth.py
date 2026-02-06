@@ -3,8 +3,7 @@ import random
 import getpass
 import sqlite3
 from typing import Optional, Tuple
-# Import the Database for type hinting (optional, but good practice)
-from Database.db_manager import DatabaseManager
+from Database import DatabaseManager
 
 
 class AuthManager:
@@ -105,6 +104,28 @@ class AuthManager:
                 return user_id, username
             else:
                 print("❌ Invalid credentials")
+                return None
+        except Exception as e:
+            print(f"❌ Sign in failed: {e}")
+            return None
+    def sign_in_web(self, login: str, password: str) -> Optional[Tuple[int, str]]:
+        """Authenticate existing user for web interface"""
+        try:
+            hashed_pw = self.hash_password(password)
+
+            self.db.cursor.execute(
+                """SELECT id, username
+                   FROM users
+                   WHERE (username = ? OR email = ?)
+                     AND password = ?""",
+                (login, login, hashed_pw)
+            )
+
+            result = self.db.cursor.fetchone()
+            if result:
+                user_id, username = result
+                return user_id, username
+            else:
                 return None
         except Exception as e:
             print(f"❌ Sign in failed: {e}")
