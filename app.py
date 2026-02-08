@@ -6,7 +6,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from dotenv import load_dotenv  # Import the loader
+from dotenv import load_dotenv
 load_dotenv()
 
 
