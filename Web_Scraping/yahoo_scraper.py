@@ -2,32 +2,30 @@ import requests
 import time
 import pandas as pd
 
-# ===== CUSTOM EXCEPTIONS =====
+
+# Custom exception classes for better error handling
 class ScraperException(Exception):
-    """Base exception for scraper errors"""
     pass
 
 
 class SessionSetupError(ScraperException):
-    """Raised when session setup fails"""
     pass
 
 
 class DataFetchError(ScraperException):
-    """Raised when data fetching fails"""
     pass
 
 
 class InvalidTickerError(ScraperException):
-    """Raised when ticker is invalid"""
     pass
 
 
-# ===== MAIN SCRAPER CLASS =====
 class YahooScraper:
 
-    def _setup_session(self,use_proxy=False, max_retries=3):
-        """Setup Yahoo Finance session with retry logic"""
+    def __init__(self):
+        self.proxy = "Not Checked"
+
+    def _setup_session(self, use_proxy=False, max_retries=3):
         for attempt in range(max_retries):
             try:
                 session = requests.Session()
@@ -44,10 +42,7 @@ class YahooScraper:
                                   "Chrome/120.0.0.0 Safari/537.36"
                 })
 
-                # Get cookies
                 session.get("https://fc.yahoo.com", timeout=30)
-
-                # Get crumb
                 response = session.get(
                     "https://query1.finance.yahoo.com/v1/test/getcrumb",
                     timeout=30
@@ -60,27 +55,27 @@ class YahooScraper:
                     print(f"Failed to get crumb: {response.status_code}")
 
             except Exception as e:
-              print(f"Setup error on attempt {attempt + 1}: {e}")
+                print(f"Setup error on attempt {attempt + 1}: {e}")
 
             if attempt < max_retries - 1:
                 time.sleep(2 ** attempt)
 
         raise SessionSetupError("Failed to setup session after all retries")
 
-
-    def data_v10(self,ticker,session,crumb,full_access = False):
-        """Fetch v10 data (Fundamentals)"""
+    def data_v10(self, ticker, session, crumb, full_access=False):
         try:
             if full_access:
                 modules = [
                     "financialData", "incomeStatementHistory", "quarterlyIncomeStatementHistory",
                     "balanceSheetHistory", "quarterlyBalanceSheetHistory",
-                    "cashflowStatementHistory", "quarterlyCashflowStatementHistory"
+                    "cashflowStatementHistory", "quarterlyCashflowStatementHistory",
+                    "assetProfile", "summaryProfile"  # ADDED summaryProfile
                 ]
                 modules_string = ",".join(modules)
                 url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules={modules_string}&crumb={crumb}"
             else:
-                url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=assetProfile,financialData&crumb={crumb}"
+                # Request both assetProfile and summaryProfile for description fallback
+                url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=assetProfile,financialData,summaryProfile&crumb={crumb}"
 
             response = session.get(url, timeout=15)
             if response.status_code != 200:
@@ -93,16 +88,35 @@ class YahooScraper:
                 return None
 
             data_content = result[0]
+
             if full_access:
+                # Inject the fallback description logic even for full access return
+                # (Optional: depends on how you use full_access return elsewhere)
+                if 'assetProfile' in data_content:
+                    desc = data_content['assetProfile'].get('longBusinessSummary')
+                    if not desc and 'summaryProfile' in data_content:
+                        data_content['assetProfile']['longBusinessSummary'] = data_content['summaryProfile'].get(
+                            'longBusinessSummary')
                 return data_content
 
             shortpath_v10 = data_content.get('financialData', {})
             raw_profile = data_content.get('assetProfile', {})
+            summary_profile = data_content.get('summaryProfile', {})
+
+            # --- ROBUST DESCRIPTION EXTRACTION ---
+            description = raw_profile.get('longBusinessSummary')
+            if not description:
+                description = summary_profile.get('longBusinessSummary')
+
+            if not description:
+                description = 'N/A'
+            # -------------------------------------
 
             financial_data = {
                 "Industry": raw_profile.get('industry', 'N/A'),
                 "Sector": raw_profile.get('sector', 'N/A'),
                 "Website": raw_profile.get('website', 'N/A'),
+                "Description": description,
                 "Target Mean Price": shortpath_v10.get('targetMeanPrice', {}).get('raw'),
                 "Recommendation": shortpath_v10.get('recommendationKey'),
                 "Number of Analyst Opinions": shortpath_v10.get('numberOfAnalystOpinions', {}).get('raw'),
@@ -123,13 +137,17 @@ class YahooScraper:
                 "Total Cash Per Share": shortpath_v10.get('totalCashPerShare', {}).get('raw')
             }
             return financial_data
+
         except Exception as e:
             print(f"Error v10: {e}")
             return None
 
-    def data_v8(self,ticker,session, time_range = "1d", interval = "1d"):
-        """Fetch v8 data (Historical Prices)"""
+    def data_v8(self, ticker, session, time_range="1d", interval="1d"):
+        """
+        IMPROVED VERSION: More lenient with international stocks
+        """
         try:
+            # Build URL based on time range
             if time_range == "max":
                 period1 = 0
                 period2 = int(time.time())
@@ -137,37 +155,94 @@ class YahooScraper:
             else:
                 url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range={time_range}&interval={interval}&events=history&includeAdjustedClose=true"
 
+            # Make request
             response = session.get(url, timeout=15)
             if response.status_code != 200:
+                # print(f"⚠️ HTTP {response.status_code} for {ticker}")
                 return None
 
             data = response.json()
+
+            # Check for errors in response
+            if data.get("chart", {}).get("error"):
+                # error_msg = data["chart"]["error"].get("description", "Unknown error")
+                # print(f"⚠️ Yahoo API error for {ticker}: {error_msg}")
+                return None
+
             if not data.get("chart", {}).get("result"):
+                # print(f"⚠️ No chart results for {ticker}")
                 return None
 
             shortpath = data["chart"]["result"][0]
-            if "timestamp" not in shortpath:
+
+            # MORE LENIENT APPROACH: Check if we have any valid data instead of failing immediately
+            raw_timestamps = shortpath.get("timestamp")
+
+            # If no timestamps at all, then we truly can't proceed
+            if not raw_timestamps or len(raw_timestamps) == 0:
+                # print(f"⚠️ No timestamps available for {ticker}")
                 return None
 
+            # Extract quotes safely
+            quote_data = shortpath.get("indicators", {}).get("quote", [{}])[0]
+
+            # Helper to safely get list or empty list
+            def get_col(name):
+                return quote_data.get(name, [])
+
+            # Get all data columns
+            raw_close = get_col("close")
+            raw_open = get_col("open")
+            raw_high = get_col("high")
+            raw_low = get_col("low")
+            raw_volume = get_col("volume")
+
+            # Adjusted close might be in a different substructure
+            adj_close_data = shortpath.get("indicators", {}).get("adjclose", [{}])[0].get("adjclose", [])
+
+            # CRITICAL FIX: Filter out None/invalid data but don't fail if some data is missing
+            clean_data = []
+            for i in range(len(raw_timestamps)):
+                # We need at least a timestamp and close price
+                if i < len(raw_close) and raw_close[i] is not None and raw_close[i] > 0:
+                    clean_data.append({
+                        "timestamp": raw_timestamps[i],
+                        "close": raw_close[i],
+                        "open": raw_open[i] if i < len(raw_open) and raw_open[i] is not None else raw_close[i],
+                        "high": raw_high[i] if i < len(raw_high) and raw_high[i] is not None else raw_close[i],
+                        "low": raw_low[i] if i < len(raw_low) and raw_low[i] is not None else raw_close[i],
+                        "volume": raw_volume[i] if i < len(raw_volume) and raw_volume[i] is not None else 0,
+                        "adjclose": adj_close_data[i] if i < len(adj_close_data) and adj_close_data[i] is not None else
+                        raw_close[i]
+                    })
+
+            # If we have no valid data after filtering, return None
+            if len(clean_data) == 0:
+                # print(f"⚠️ All data points invalid for {ticker}")
+                return None
+
+            # Build the return dictionary with clean data
             historical_data = {
-                "TimeStamp": shortpath["timestamp"],
-                "Close": shortpath["indicators"]["quote"][0]["close"],
-                "Open": shortpath["indicators"]["quote"][0]["open"],
-                "High": shortpath["indicators"]["quote"][0]["high"],
-                "Low": shortpath["indicators"]["quote"][0]["low"],
-                "Volume": shortpath["indicators"]["quote"][0]["volume"],
-                "AdjClose": shortpath["indicators"]["adjclose"][0].get("adjclose", [])
+                "TimeStamp": [d["timestamp"] for d in clean_data],
+                "Close": [d["close"] for d in clean_data],
+                "Open": [d["open"] for d in clean_data],
+                "High": [d["high"] for d in clean_data],
+                "Low": [d["low"] for d in clean_data],
+                "Volume": [d["volume"] for d in clean_data],
+                "AdjClose": [d["adjclose"] for d in clean_data]
             }
 
-            return  historical_data
+            # print(f"✓ Successfully fetched {len(clean_data)} valid data points for {ticker}")
+            return historical_data
+
         except Exception as e:
-            print(f"Error v8: {e}")
+            # print(f"Error v8 for {ticker}: {e}")
             return None
 
-    def data_v7(self,ticker,session,crumb):
-        """Fetch v7 data (Current Quote)"""
+    def data_v7(self, ticker, session, crumb):
         try:
             url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={ticker}&crumb={crumb}"
+
             response = session.get(url, timeout=15)
             if response.status_code != 200:
                 return None
@@ -201,67 +276,65 @@ class YahooScraper:
             }
 
             return snapshot_data
+
         except Exception as e:
             print(f"Error v7: {e}")
             return None
 
-    def check_proxy_ip(self,use_proxy = True):
-        """Check current IP"""
+    def check_proxy_ip(self, use_proxy=True):
         try:
             session = requests.Session()
+
             if use_proxy:
                 session.proxies = {
                     "http": "socks5h://127.0.0.1:9050",
                     "https": "socks5h://127.0.0.1:9050"
                 }
+
             response = session.get("https://api.ipify.org?format=json", timeout=15)
             if response.status_code == 200:
                 return response.json().get("ip")
-        except:
+
+        except Exception as e:
+            print(f"Error checking IP: {e}")
             return None
 
         return None
 
-
-    def v8_formatter(self,ticker_data):
+    def v8_formatter(self, ticker_data):
         try:
             if not ticker_data.get('v8'):
                 raise Exception("Historical Data Not Present")
-            else:
-                data = pd.DataFrame(ticker_data.get('v8'))
 
-                data["TimeStamp"] = pd.to_datetime(data["TimeStamp"], unit="s")
-                data["TimeStamp"] = data["TimeStamp"].dt.date
-                data.rename(columns={"TimeStamp": "Date"}, inplace=True)
-                data.set_index("Date",inplace=True)
+            data = pd.DataFrame(ticker_data.get('v8'))
+            data["TimeStamp"] = pd.to_datetime(data["TimeStamp"], unit="s")
+            data["TimeStamp"] = data["TimeStamp"].dt.date
+            data.rename(columns={"TimeStamp": "Date"}, inplace=True)
+            data.set_index("Date", inplace=True)
 
-                cols = ["Close", "Open", "High", "Low", "AdjClose"]
-                for i in cols:
-                    data[i] = data[i].astype("float32")
+            cols = ["Close", "Open", "High", "Low", "AdjClose"]
+            for col in cols:
+                data[col] = data[col].astype("float32")
 
-                return data
+            return data
 
         except Exception as e:
-            print("Exception Formatter v8_formatter: ",e)
+            print(f"Exception Formatter v8_formatter: {e}")
+            return None
 
+    def scrape(self, ticker, ip_address=None, time_range="1d", interval="1d",
+               use_proxy=False, v10=False, v8=False, v7=False,
+               v10_full_access=False, max_retries=3):
 
-    def scrape(self, ticker,ip_address = None,time_range = "1d",interval = "1d",use_proxy = False,v10 = False,
-               v8= False,v7= False,v10_full_access = False,max_retries: int = 3):
-        """
-        Main scraping method
-        """
         result = {}
+
         try:
-            # 1. Setup Session
             try:
                 session, crumb = self._setup_session(use_proxy=use_proxy, max_retries=max_retries)
             except SessionSetupError as e:
-                print(f"Session failed: {e}")
+                print(f"Session setup failed: {e}")
                 return None
 
-            #print(self.check_proxy_ip(use_proxy=True))
-
-            # 2. Check Proxy
             if use_proxy and ip_address:
                 current_ip = self.check_proxy_ip(use_proxy=True)
                 if current_ip and current_ip != ip_address:
@@ -269,7 +342,6 @@ class YahooScraper:
                 else:
                     self.proxy = "Proxy Inactive"
 
-            # 3. Fetch Data Modules
             if v10:
                 result["v10"] = self.data_v10(ticker, session, crumb, full_access=v10_full_access)
 
@@ -281,19 +353,37 @@ class YahooScraper:
 
             return result
 
-        except Exception as  e:
-            print(f"Scrape master error for {ticker}: {e}")
+        except Exception as e:
+            print(f"Scrape error for {ticker}: {e}")
+            return None
 
 
 if __name__ == "__main__":
     start = time.perf_counter()
-    ys =YahooScraper()
+
+    ys = YahooScraper()
     ip = ys.check_proxy_ip(use_proxy=False)
-    print("My IP:",ip)
-    s = ys.scrape("ETH-USD",ip_address=ip,time_range="1d",use_proxy=True,v10=True,v8=True,v7=True,v10_full_access=False)
+    print(f"My IP: {ip}")
+
+    # Test with international stock
+    print("\n=== Testing TCS.NS (Indian Stock) ===")
+    s = ys.scrape(
+        "TCS.NS",
+        ip_address=ip,
+        time_range="1mo",
+        use_proxy=True,
+        v10=True,
+        v8=True,
+        v7=True,
+        v10_full_access=False
+    )
+
     end = time.perf_counter()
-    print("Tor Proxy Status:",ys.proxy)
-    print("v10",s["v10"],"\n\n\n\n")
-    print("v8",s["v8"],"\n\n\n\n")
-    print("v7",s["v7"],"\n\n\n\n")
-    print(ys.v8_formatter(s))
+
+    print(f"\nProxy Status: {ys.proxy}")
+    print(f"Time taken: {end - start:.2f} seconds")
+
+    if s:
+        print("\nv7 (Current Quote):", s.get("v7"))
+        if s.get("v10"):
+            print("\nDescription:", s.get("v10").get("Description"))

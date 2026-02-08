@@ -3,17 +3,19 @@ import pandas as pd
 from typing import Tuple, List
 
 
+# Custom exception for data validation failures
 class DataValidationError(Exception):
-    """Custom exception for data validation errors"""
     pass
 
 
 class FeatureCalculator:
+
     def __init__(self):
+        # Define required columns for stock data processing
         self.required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
 
+    # Validate input DataFrame before processing features
     def validate_input(self, df: pd.DataFrame) -> Tuple[bool, List[str]]:
-        """Validate input dataframe before processing"""
         errors = []
         if df.empty:
             errors.append("DataFrame is empty")
@@ -23,105 +25,103 @@ class FeatureCalculator:
         if missing and 'AdjClose' not in df.columns and 'Close' not in df.columns:
             errors.append(f"Missing critical columns: {missing}")
 
-        if len(df) < 200:
-            errors.append(f"Need at least 200 rows, got {len(df)}")
+        if len(df) < 60:
+            errors.append(f"Need at least 60 rows, got {len(df)}")
 
         return len(errors) == 0, errors
 
-    def calculate_features(self, df, threshold=0.002, regime="volatile"):
+    # --- NEW: CONTEXT FEATURE LOGIC ---
+    def add_context_features(self, target_df, market_map, context):
         """
-        Calculates features and dynamic targets based on market regime.
+        Calculates Relative Strength vs Peers and Partners.
+        """
+        df = target_df.copy()
 
-        Args:
-            df: Input OHLCV DataFrame
-            threshold: Fixed % used if regime is 'volatile'
-            regime: 'stable' or 'volatile' (from Gemini)
-        """
+        # Helper to calculate group index
+        def get_group_index(tickers):
+            prices = pd.DataFrame(index=df.index)
+            for t in tickers:
+                if t in market_map and not market_map[t].empty:
+                    # Align dates and forward fill
+                    if 'AdjClose' in market_map[t].columns:
+                        clean_series = market_map[t]['AdjClose'].reindex(df.index).ffill()
+                        prices[t] = clean_series
+
+            if prices.empty: return None
+            # Normalize each stock to start at 1.0, then average them
+            return (prices / prices.iloc[0]).mean(axis=1)
+
+        # 1. Peer Analysis (Relative Strength vs Competitors)
+        peer_idx = get_group_index(context.get('peers', []))
+        if peer_idx is not None:
+            target_norm = df['AdjClose'] / df['AdjClose'].iloc[0]
+            df['Rel_Str_Peers'] = target_norm / peer_idx
+        else:
+            df['Rel_Str_Peers'] = 1.0
+
+        # 2. Partner Analysis (Relative Strength vs Supply Chain)
+        partner_idx = get_group_index(context.get('partners', []))
+        if partner_idx is not None:
+            target_norm = df['AdjClose'] / df['AdjClose'].iloc[0]
+            df['Rel_Str_Partners'] = target_norm / partner_idx
+        else:
+            df['Rel_Str_Partners'] = 1.0
+
+        return df
+
+    # Calculate technical indicators
+    def calculate_features(self, df, threshold=0.01, regime="volatile"):
+        # Validate input data first
         is_valid, errors = self.validate_input(df)
-        if not is_valid:
-            raise DataValidationError(f"Invalid input: {'; '.join(errors)}")
+        if not is_valid: return None
 
-        try:
-            df = df.copy()
+        df = df.copy()
+        # Fallback for AdjClose
+        if 'AdjClose' not in df.columns: df['AdjClose'] = df['Close']
 
-            # Ensure price columns exist
-            if 'AdjClose' not in df.columns:
-                df['AdjClose'] = df['Close'] if 'Close' in df.columns else None
+        # 1. Returns
+        df['Ret'] = df['AdjClose'].pct_change()
 
-            # Basic returns
-            df['Ret'] = df['AdjClose'].pct_change()
+        # 2. Volatility (ATR)
+        h_l = df['High'] - df['Low']
+        h_c = np.abs(df['High'] - df['AdjClose'].shift())
+        l_c = np.abs(df['Low'] - df['AdjClose'].shift())
+        tr = pd.concat([h_l, h_c, l_c], axis=1).max(axis=1)
+        df['ATR'] = tr.rolling(14).mean()
 
-            # ============= VOLATILITY FEATURES =============
-            # ATR (14-day)
-            hl = df['High'] - df['Low']
-            hc = np.abs(df['High'] - df['AdjClose'].shift())
-            lc = np.abs(df['Low'] - df['AdjClose'].shift())
-            tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
-            df['ATR'] = tr.rolling(14).mean()
-            df['Vol_Regime'] = df['ATR'] / df['ATR'].rolling(100).mean()
+        # Volatility regime
+        df['Vol_Regime'] = df['ATR'] / df['ATR'].rolling(100).mean()
 
-            # ============= MOMENTUM & TECHNICALS =============
-            # RSI
-            delta = df['AdjClose'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-            rs = gain / loss
-            df['RSI'] = 100 - (100 / (1 + rs))
+        # 3. RSI
+        delta = df['AdjClose'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+        rs = gain / loss
+        df['RSI'] = 100 - (100 / (1 + rs))
 
-            # MACD
-            ema12 = df['AdjClose'].ewm(span=12).mean()
-            ema26 = df['AdjClose'].ewm(span=26).mean()
-            macd = ema12 - ema26
-            df['MACD_Hist'] = macd - macd.ewm(span=9).mean()
+        # 4. MACD
+        ema12 = df['AdjClose'].ewm(span=12).mean()
+        ema26 = df['AdjClose'].ewm(span=26).mean()
+        df['MACD'] = ema12 - ema26
+        df['MACD_Hist'] = df['MACD'] - df['MACD'].ewm(span=9).mean()
 
-            # Moving Average Distances
-            df['MA_20'] = df['AdjClose'].rolling(20).mean()
-            df['MA_50'] = df['AdjClose'].rolling(50).mean()
-            df['Dist_MA50'] = (df['AdjClose'] - df['MA_50']) / df['MA_50']
+        # 5. Moving Averages
+        df['MA_50'] = df['AdjClose'].rolling(50).mean()
+        df['Dist_MA50'] = (df['AdjClose'] - df['MA_50']) / df['MA_50']
 
-            # ============= REGIME-BASED TARGET LOGIC =============
-            # Shift returns to get 'tomorrow's' result for today's row
-            df['Next_Ret'] = df['Ret'].shift(-1)
+        # --- TARGET GENERATION (Volatility Focus) ---
+        # Predict if price moves > threshold (1.0%)
+        df['Next_Ret'] = df['AdjClose'].pct_change().shift(-1)
+        df['Target'] = (df['Next_Ret'].abs() > threshold).astype(int)
 
-            if regime == "stable":
-                # Strategy: Target moves > 50% of typical daily volatility (ATR)
-                # Best for JNJ, KO, PG
-                df['Dynamic_Threshold'] = (df['ATR'] / df['AdjClose']) * 0.5
-                df['Target'] = (df['Next_Ret'].abs() > df['Dynamic_Threshold']).astype(int)
-            else:
-                # Strategy: Target fixed momentum breakouts
-                # Best for TSLA, NVDA, TCS.NS
-                df['Target'] = (df['Next_Ret'].abs() > threshold).astype(int)
+        # Store direction for UI display (even if we train on volatility)
+        df['Target_Direction'] = (df['Next_Ret'] > 0).astype(int)
 
-            df['Target_Direction'] = (df['Next_Ret'] > 0).astype(int)
+        df = df.replace([np.inf, -np.inf], 0).dropna()
+        return df
 
-            # Clean up
-            df = df.replace([np.inf, -np.inf], 0).ffill().fillna(0)
-
-            return df
-
-        except Exception as e:
-            raise DataValidationError(f"Feature calculation failed: {str(e)}")
-
-    @staticmethod
-    def get_sample_weights(df, recent_weeks=12, multiplier=3.5):
-        """
-        Generates hybrid weights for training.
-        Ensures recent data has more impact on the loss function.
-        """
-        train_size = len(df)
-        weights = np.ones(train_size)
-
-        # Calculate cutoff for "recent" data (5 trading days per week)
-        recent_days = recent_weeks * 5
-        cutoff = max(0, train_size - recent_days)
-
-        # Apply higher weight to the most recent period
-        weights[cutoff:] = multiplier
-
-        # Linear smoothing for the transition to avoid abrupt weight jumps
-        decay_window = min(40, cutoff)
-        if decay_window > 0:
-            weights[cutoff - decay_window:cutoff] = np.linspace(1.0, multiplier, decay_window)
-
-        return weights
+    # Flask-specific method
+    def calculate_features_for_api(self, df, regime="volatile"):
+        df_with_features = self.calculate_features(df, regime=regime)
+        if df_with_features is None: return None
+        return df_with_features

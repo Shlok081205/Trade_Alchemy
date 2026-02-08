@@ -1,62 +1,72 @@
 import sqlite3
-import sys
+from datetime import datetime
+
 
 class DatabaseManager:
-    """Handles all database operations with persistent storage"""
-
+    # Initialize database connection and create tables if they don't exist
     def __init__(self, db_path: str = "app.db"):
         self.db_path = db_path
-        self.conn = None
-        self.cursor = None
-        self._connect()
+        # Create all necessary tables when the database manager is initialized
         self._initialize_tables()
 
-    def _connect(self):
-        """Establish connection to persistent database file"""
-        try:
-            self.conn = sqlite3.connect(self.db_path)
-            self.cursor = self.conn.cursor()
-            print(f"✅ Database connected: {self.db_path}")
-        except Exception as e:
-            print(f"❌ Database connection failed: {e}")
-            sys.exit(1)
+    # Creates a thread-safe connection for Flask
+    def get_connection(self):
+        conn = sqlite3.connect(self.db_path, check_same_thread=True)
+        conn.row_factory = sqlite3.Row
+        return conn
 
+    # Create all database tables if they don't already exist
     def _initialize_tables(self):
-        """Create tables if they don't exist"""
-        try:
-            # Users table
-            self.cursor.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    email TEXT UNIQUE NOT NULL,
-                    password TEXT NOT NULL,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+        conn = self.get_connection()
+        cursor = conn.cursor()
 
-            # Watchlist table
-            self.cursor.execute("""
-                CREATE TABLE IF NOT EXISTS watchlist (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    ticker TEXT NOT NULL,
-                    buy_price REAL,
-                    buy_date TEXT,
-                    added_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users(id),
-                    UNIQUE(user_id, ticker)
-                )
-            """)
+        # Users table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                is_verified INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-            self.conn.commit()
-            print("✅ Database tables initialized")
-        except Exception as e:
-            print(f"❌ Table initialization failed: {e}")
-            sys.exit(1)
+        # OTP verification table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS otp_verification (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                otp_code TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                expires_at TEXT NOT NULL,
+                is_used INTEGER DEFAULT 0
+            )
+        """)
 
-    def close(self):
-        """Close database connection"""
-        if self.conn:
-            self.conn.close()
-            print("✅ Database connection closed")
+        # Watchlist table - CORRECTED SCHEMA with added_at
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS watchlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                ticker TEXT NOT NULL,
+                buy_price REAL,
+                added_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                UNIQUE(user_id, ticker)
+            )
+        """)
+
+        conn.commit()
+        conn.close()
+
+    def cleanup_expired_otps(self):
+        """Remove expired OTP codes from the database"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM otp_verification WHERE expires_at < ?",
+            (datetime.now().isoformat(),)
+        )
+        conn.commit()
+        conn.close()

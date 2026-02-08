@@ -8,3 +8,8 @@ backtester.py
 confidence_calibration.py
 /verify_fix.py
 project_Structure.py
+.env
+app.db
+config.py
+*.pyc
+*.pyc

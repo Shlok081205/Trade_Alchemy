@@ -1,92 +1,128 @@
-from typing import Dict
-from Web_Scraping.yahoo_scraper import YahooScraper
-from Web_Scraping.gemini import Gemini
-from Web_Scraping.config_setup import GEMINI_API_KEY
-from Machine_Learning.LSTMConfidenceModel import MultiTimeframeLSTM
-from Machine_Learning.DataProcessor import FeatureCalculator
+from typing import Dict, Optional
+from Web_Scraping import YahooScraper
+from Web_Scraping import Gemini
+from Machine_Learning import MultiTimeframeLSTM
+from Machine_Learning import FeatureCalculator
 
 
 class StockAnalyzer:
-    """Handles stock data fetching and analysis"""
 
-    def __init__(self):
+    def __init__(self, gemini_api_key=None):
         self.scraper = YahooScraper()
         self.gemini = Gemini()
         self.feature_calc = FeatureCalculator()
         self.lstm = MultiTimeframeLSTM()
+        self.gemini_api_key = gemini_api_key
 
-    def get_deep_data(self, ticker: str):
-        print(f"\n🔍 Fetching deep data for {ticker}...")
-        try:
-            data = self.scraper.scrape(ticker, v7=True)
-            if not data or 'v7' not in data:
-                print(f"❌ Failed to fetch data for {ticker}")
-                return
+    # Main Analysis Method
+    def ai_prediction(self, ticker: str, gemini_api_key: str = None) -> Optional[Dict]:
 
-            v7 = data['v7']
-            print("\n" + "=" * 80)
-            print(f"📊 DEEP STOCK DATA: {ticker}")
-            print(f"Current Price:       ${v7.get('Current Price', 'N/A')}")
-            print(f"Market Cap:          ${v7.get('Market Cap', 'N/A'):,.0f}" if v7.get(
-                'Market Cap') else "Market Cap:          N/A")
-            print(f"P/E Ratio:           {v7.get('Trailing PE', 'N/A')}")
-            print("=" * 80)
-        except Exception as e:
-            print(f"❌ Error fetching deep data: {e}")
-
-    def ai_prediction(self, ticker: str):
+        api_key = gemini_api_key or self.gemini_api_key
         print(f"\n🤖 Running AI analysis for {ticker}...")
+
         try:
-            # Step A: Gemini Context
-            print("📡 Fetching market regime...")
-            context_data = self.gemini.get_info(ticker, GEMINI_API_KEY)
-            regime = context_data.get('market_regime', 'volatile') if context_data else 'volatile'
+            # 1. GET CONTEXT (Peers & Partners)
+            # We need this to calculate Relative Strength features
+            context = {
+                'peers': [],
+                'partners': [],
+                'market_regime': 'volatile'
+            }
 
-            # Step B: Historical Data
-            print("📊 Fetching historical data...")
-            raw_data = self.scraper.scrape(ticker, v8=True, time_range="5y")
-            if not raw_data: return None
-            df = self.scraper.v8_formatter(raw_data)
+            if api_key:
+                gemini_data = self.gemini.get_info(ticker, api_key)
+                if gemini_data:
+                    context['peers'] = gemini_data.get('peers', [])[:3]
+                    context['partners'] = gemini_data.get('partners', [])[:3]
+                    context['market_regime'] = gemini_data.get('market_regime', 'volatile')
 
-            # Step C: Features & Prediction
-            df = self.feature_calc.calculate_features(df, regime=regime)
-            if len(df) < 200: return None
+            # 2. DATA FETCHING (Ecosystem)
+            # We fetch data for the main ticker AND its ecosystem
+            tickers_to_fetch = [ticker]
+            # Extract tickers from context (handling dicts if Gemini returns dicts)
+            for p in context['peers']:
+                if isinstance(p, dict) and 'ticker' in p:
+                    tickers_to_fetch.append(p['ticker'])
+                elif isinstance(p, str):
+                    tickers_to_fetch.append(p)
 
-            result = self.lstm.train_and_predict(df, verbose=0)
+            for p in context['partners']:
+                if isinstance(p, dict) and 'ticker' in p:
+                    tickers_to_fetch.append(p['ticker'])
+                elif isinstance(p, str):
+                    tickers_to_fetch.append(p)
+
+            # Deduplicate
+            tickers_to_fetch = list(set(tickers_to_fetch))
+            print(f"📊 Fetching data for ecosystem: {tickers_to_fetch}")
+
+            market_map = {}
+            for t in tickers_to_fetch:
+                # Use v8 for historical data
+                df = self.scraper.scrape(t, v8=True, time_range="5y")
+                if df and 'v8' in df:
+                    formatted = self.scraper.v8_formatter(df)
+                    if formatted is not None and not formatted.empty:
+                        market_map[t] = formatted
+
+            if ticker not in market_map:
+                print("❌ Main ticker data not found.")
+                return None
+
+            # 3. FEATURE ENGINEERING
+            # A. Basic Features
+            df_main = self.feature_calc.calculate_features(
+                market_map[ticker],
+                regime=context['market_regime']
+            )
+            if df_main is None: return None
+
+            # B. Context Features (Relative Strength)
+            # Simplify context list for processor
+            simple_context = {
+                'peers': [t for t in tickers_to_fetch if t in context['peers'] or any(
+                    p.get('ticker') == t for p in context['peers'] if isinstance(p, dict))],
+                'partners': [t for t in tickers_to_fetch if t in context['partners'] or any(
+                    p.get('ticker') == t for p in context['partners'] if isinstance(p, dict))]
+            }
+            df_final = self.feature_calc.add_context_features(df_main, market_map, simple_context)
+
+            # 4. PREDICTION
+            result = self.lstm.train_and_predict(df_final)
             if not result: return None
 
-            prob, accuracy, _ = result
-            direction = "UP 🟢" if prob > 0.5 else "DOWN 🔴"
-            confidence = prob if prob > 0.5 else (1 - prob)
+            prob, acc, _ = result
 
-            print(f"\n🎯 Result: {direction} (Conf: {confidence:.1%}) | Regime: {regime}")
+            # 5. INTERPRETATION
+            # Prob > 0.5 means High Volatility (Risk)
+            # Prob < 0.5 means Stable
+            is_risky = prob > 0.5
+            confidence = abs(prob - 0.5) * 2
 
             return {
                 'ticker': ticker,
-                'direction': direction,
-                'confidence': confidence,
-                'price': df['AdjClose'].iloc[-1],
-                'atr': df['ATR'].iloc[-1]
+                'direction': "DOWN" if is_risky else "UP",
+                'probability': float(prob),
+                'confidence': float(confidence),
+                'regime': context['market_regime'],
+                'accuracy': float(acc * 100),
+                'atr': float(df_final['ATR'].iloc[-1]),
+                'current_price': float(df_final['AdjClose'].iloc[-1])
             }
         except Exception as e:
-            print(f"❌ Prediction failed: {e}")
+            print(f"Analyzer Error: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
-    def calculate_position_size(self, prediction_result: Dict):
-        try:
-            capital = float(input("\n💰 Enter capital: $").replace(',', ''))
-            atr = prediction_result['atr']
-            price = prediction_result['price']
+    # Flask API calls this
+    def analyze_for_api(self, ticker: str):
+        return self.ai_prediction(ticker)
 
-            # Logic: Risk 2% of capital, Stop Loss at 2x ATR
-            risk_amount = capital * 0.02
-            risk_per_share = atr * 2
-            shares = int(risk_amount / risk_per_share) if risk_per_share > 0 else 0
+    def get_fundamentals(self, ticker: str):
+        data = self.scraper.scrape(ticker, v10=True)
+        return {'success': True, 'data': data['v10']} if data and 'v10' in data else {'success': False}
 
-            # Adjust by confidence
-            shares = int(shares * prediction_result['confidence'])
-
-            print(f"\n📋 RECOMMENDATION: Buy {shares} shares (${shares * price:,.2f})")
-            print(f"   (Based on Volatility ${atr:.2f} and Risk ${risk_amount:.2f})")
-        except:
-            print("❌ Invalid input")
+    def get_quote(self, ticker: str):
+        data = self.scraper.scrape(ticker, v7=True)
+        return {'success': True, 'data': data['v7']} if data and 'v7' in data else {'success': False}
