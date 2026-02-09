@@ -134,11 +134,9 @@
                 <h2 id="display-name" style="margin-bottom: 5px;">Loading...</h2>
                 <p id="display-email" style="color: var(--text-muted); margin-bottom: 30px;">...</p>
 
-                <a href="/logout" style="text-decoration: none;">
-                    <button class="ai-mode-btn" style="width: 100%; justify-content: center; background: rgba(248, 113, 113, 0.1); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.2);">
-                        Logout
-                    </button>
-                </a>
+                <button id="logout-btn" class="ai-mode-btn" style="width: 100%; justify-content: center; background: rgba(248, 113, 113, 0.1); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.2);">
+                    Logout
+                </button>
             </div>
 
             <div class="account-content">
@@ -277,6 +275,24 @@
             } finally {
                 btn.innerText = originalText;
                 btn.disabled = false;
+            }
+        });
+
+        // 3. Handle Logout (Corrected)
+        // Ensure this ID matches the button in HTML
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/logout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    window.location.href = '/'; // Redirect to landing page
+                }
+            } catch (error) {
+                console.error('Logout failed', error);
             }
         });
     </script>

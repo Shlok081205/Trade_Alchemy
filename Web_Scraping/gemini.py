@@ -61,9 +61,8 @@ class Gemini:
         """
 
         # Call Gemini API with the prompt
-        # UPDATED MODEL: Changed from 'gemini-2.0-flash-exp' to 'gemini-1.5-flash'
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-flash-latest",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json"

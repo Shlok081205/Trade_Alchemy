@@ -22,7 +22,7 @@ app.secret_key = secrets.token_hex(16)
 try:
     db = DatabaseManager()
     auth = AuthManager(db)
-    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_ACTUAL_API_KEY_HERE")
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
     analyzer = StockAnalyzer(gemini_api_key=GEMINI_API_KEY)
     print("✅ System modules initialized successfully.")
 except Exception as e:
