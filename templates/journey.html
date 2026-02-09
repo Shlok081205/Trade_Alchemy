@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Our Journey | TradeAlchemy</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="../static/css/style.css">
+
+    <style>
+        /* CSS Variables matching your Dashboard */
+        :root {
+            --primary-color: #e67e22;
+            --secondary-color: #9b59b6;
+            --card-bg: rgba(255, 255, 255, 0.05); /* Match Dashboard Card Style */
+        }
+
+        /* Override Bootstrap's white background */
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+        }
+
+        /* Adjust Main to allow scrolling content (Dashboard .main centers things) */
+        .main-content-scroll {
+            width: 100%;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Hero Styling consistent with Dashboard Font */
+        .hero-section {
+            background: linear-gradient(135deg, rgba(230, 126, 34, 0.1), rgba(155, 89, 182, 0.1));
+            padding: 4rem 0;
+            width: 100%;
+            text-align: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 2rem;
+        }
+
+        .hero-section h1 {
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 700;
+            font-size: 3rem;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
+        }
+
+        /* Cards matching Dashboard Aesthetic */
+        .section-card {
+            background-color: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 2.5rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+            max-width: 900px;
+            width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .icon-badge {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: white;
+            margin-right: 15px;
+        }
+
+        h2 { font-weight: 600; display: flex; align-items: center; color: var(--text-main); }
+        p, li { color: var(--text-muted); font-size: 1.05rem; }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <div class="header-content">
+            <a href="dashboard.html" class="logo-link">
+                <div class="logo">
+                    <img src="../static/images/logo.png" alt="TradeAlchemy Logo" class="logo-img">
+                    <span class="logo-text">TradeAlchemy</span>
+                </div>
+            </a>
+
+            <nav class="nav">
+                <a href="dashboard.html" class="nav-link">Home</a>
+                <a href="watchlist.html" class="nav-link">Watchlist</a>
+            </nav>
+
+            <div class="header-actions">
+                <a href="account.html" class="account-link">
+                    <div class="account-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <div style="flex: 1; overflow-y: auto;">
+
+        <section class="hero-section">
+            <div class="container">
+                <h1>TradeAlchemy Journey</h1>
+                <p>Our development story and learning experience</p>
+            </div>
+        </section>
+
+        <div class="container pb-5">
+            <div class="section-card" id="inspiration">
+                <h2><div class="icon-badge"><i class="fas fa-lightbulb"></i></div> Project Inspiration</h2>
+                <p>TradeAlchemy was conceived in response to the rapidly growing interest in stock markets, especially among beginners who often find existing platforms overwhelming.</p>
+                <p>Most tools focus heavily on raw data without explaining the underlying concepts. The goal was to bridge this gap by creating a single platform that blends learning, visualization, and intelligent insights.</p>
+            </div>
+
+            <div class="section-card" id="objectives">
+                <h2><div class="icon-badge"><i class="fas fa-bullseye"></i></div> Project Objectives</h2>
+                <p>The primary objective is to make stock market education and analysis accessible.</p>
+                <ul>
+                    <li>Provide a beginner-friendly interface for understanding market fundamentals</li>
+                    <li>Visualize stock data in a clean and intuitive format</li>
+                    <li>Introduce AI-based predictions to demonstrate ML applications</li>
+                    <li>Encourage analytical thinking through data-driven insights</li>
+                </ul>
+            </div>
+
+            <div class="section-card" id="milestones">
+                <h2><div class="icon-badge"><i class="fas fa-flag-checkered"></i></div> Development Milestones</h2>
+                <ul>
+                    <li>Finalization of project concept and requirements</li>
+                    <li>Designing a consistent, modern "Dark Mode" UI</li>
+                    <li>Implementation of stock data fetching (Yahoo Finance)</li>
+                    <li>Integration of LSTM machine learning models</li>
+                    <li>Extensive testing and debugging</li>
+                </ul>
+            </div>
+
+            <div class="section-card" id="challenges">
+                <h2><div class="icon-badge"><i class="fas fa-mountain"></i></div> Challenges & Solutions</h2>
+                <p><strong>Challenge:</strong> Handling real-time time-series stock data.<br>
+                <strong>Solution:</strong> Used robust libraries like Pandas and yFinance with caching strategies.</p>
+                <p><strong>Challenge:</strong> Frontend-Backend integration.<br>
+                <strong>Solution:</strong> Created a clean REST API structure in Flask.</p>
+            </div>
+
+            <div class="section-card" id="technologies">
+                <h2><div class="icon-badge"><i class="fas fa-code"></i></div> Technologies Used</h2>
+                <ul>
+                    <li><strong>Backend:</strong> Python, Flask</li>
+                    <li><strong>Data & ML:</strong> Pandas, NumPy, TensorFlow/Keras</li>
+                    <li><strong>Frontend:</strong> HTML5, CSS3, JavaScript (Vanilla), Bootstrap Grid</li>
+                    <li><strong>APIs:</strong> Yahoo Finance, Gemini AI</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-wrapper">
+            <div class="footer-left">
+                <a href="dashboard.html" class="logo-link">
+                    <div class="logo">
+                        <img src="../static/images/logo.png" alt="Logo" class="logo-img">
+                        <span class="logo-text">TradeAlchemy</span>
+                    </div>
+                </a>
+                <p class="footer-description">Semester 3 Project</p>
+            </div>
+
+            <div class="footer-right">
+                <div class="footer-col">
+                    <h4>About us</h4>
+                    <a href="team.html">Team</a>
+                    <a href="journey.html">Journey</a>
+                </div>
+                <div class="footer-col">
+                    <h4>Learn</h4>
+                    <a href="stock_market.html">Stock Market</a>
+                    <a href="ai_ml.html">AI ML</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
