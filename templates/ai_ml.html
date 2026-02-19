@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI & ML | TradeAlchemy</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .gradient-text {
@@ -16,59 +18,90 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
         }
+        .main-content {
+            padding-top: 50px;
+            padding-bottom: 50px;
+            flex: 1;
+        }
     </style>
 </head>
-<body class="bg-[#0a0a0a] text-gray-300 font-sans">
+<body>
 
-    <nav class="p-6 flex justify-between items-center max-w-7xl mx-auto">
-        <div class="flex items-center gap-2">
-            <img src="logo.png" alt="Logo" class="h-8">
-            <span class="text-xl font-bold text-white">Trade<span class="gradient-text">Alchemy</span></span>
+    <header class="header">
+        <div class="header-content">
+            <a href="dashboard.html" class="logo-link">
+                <div class="logo"><img src="/static/images/logo.png" alt="Logo" class="logo-img"><span class="logo-text">TradeAlchemy</span></div>
+            </a>
+            <nav class="nav">
+                <a href="dashboard.html" class="nav-link">Home</a>
+                <a href="watchlist.html" class="nav-link">Watchlist</a>
+            </nav>
+            <div class="header-actions">
+                <a href="account.html" class="account-link">
+                    <div class="account-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    </div>
+                </a>
+            </div>
         </div>
-        <div class="space-x-6 text-sm">
-            <a href="index.html" class="hover:text-white transition">Home</a>
-            <a href="about.html" class="hover:text-white transition">About</a>
-            <a href="ai_ml.html" class="text-white border-b border-purple-500 pb-1">AI/ML</a>
-        </div>
-    </nav>
+    </header>
 
-    <section class="py-20 text-center">
-        <h1 class="text-5xl font-extrabold text-white mb-4">The <span class="gradient-text">Intelligence</span> Behind the Trade</h1>
-        <p class="text-gray-400 max-w-2xl mx-auto">Transmuting historical data into future insights using state-of-the-art Deep Learning.</p>
-    </section>
+    <main class="main-content">
+        <section class="py-16 text-center px-6">
+            <h1 class="text-5xl font-extrabold text-white mb-6">Demystifying <span class="gradient-text">AI & ML</span> in Trading</h1>
+            <p class="text-gray-400 max-w-3xl mx-auto text-lg leading-relaxed">
+                The financial world generates millions of data points every second. Discover how Artificial Intelligence and Machine Learning turn this massive sea of information into broad, actionable insights.
+            </p>
+        </section>
 
-    <main class="max-w-5xl mx-auto px-6 pb-20">
-        <div class="grid md:grid-cols-2 gap-12 items-center">
+        <div class="max-w-5xl mx-auto px-6 pb-20 space-y-12">
+
             <div class="glass-card p-8 rounded-2xl">
-                <h2 class="text-2xl font-semibold text-white mb-4">Predictive Modeling with LSTM</h2>
-                <p class="mb-4">TradeAlchemy leverages <strong>Long Short-Term Memory (LSTM)</strong> networks, a specialized type of Recurrent Neural Network (RNN) capable of learning long-term dependencies.</p>
-                <p>Unlike standard neural networks, LSTMs have "memory cells" that can retain information over time, making them ideal for predicting stock prices where past trends heavily influence future movements.</p>
-            </div>
-            <div class="space-y-6">
-                <div class="flex gap-4">
-                    <div class="text-purple-500 font-bold text-2xl">01</div>
-                    <div>
-                        <h3 class="text-white font-medium">Data Harvesting</h3>
-                        <p class="text-sm">Real-time ingestion of market tickers and historical OHLC data.</p>
-                    </div>
+                <h2 class="text-3xl font-semibold text-white mb-4">What is AI in the Stock Market?</h2>
+                <p class="text-gray-300 leading-relaxed mb-6">
+                    At its core, Artificial Intelligence in the stock market is about teaching computers to recognize patterns. Instead of relying purely on human intuition, AI systems analyze past market behaviors, news events, and broad economic indicators to understand how different factors might influence stock prices over time.
+                </p>
+                            </div>
+
+            <div class="grid md:grid-cols-2 gap-8 items-stretch">
+                <div class="glass-card p-8 rounded-2xl flex flex-col justify-center">
+                    <h3 class="text-2xl font-semibold text-white mb-3 text-purple-400">The Power of Machine Learning</h3>
+                    <p class="text-gray-400 leading-relaxed">
+                        Machine Learning (ML) is a subset of AI that focuses on adaptation. ML algorithms don't just follow strict, pre-programmed rules; they learn from new data. As market conditions naturally shift, these models adjust their understanding to find hidden trends that traditional analysis might miss.
+                    </p>
                 </div>
-                <div class="flex gap-4">
-                    <div class="text-orange-500 font-bold text-2xl">02</div>
-                    <div>
-                        <h3 class="text-white font-medium">Feature Engineering</h3>
-                        <p class="text-sm">Normalizing data and calculating technical indicators for model input.</p>
-                    </div>
-                </div>
-                <div class="flex gap-4">
-                    <div class="text-red-500 font-bold text-2xl">03</div>
-                    <div>
-                        <h3 class="text-white font-medium">Pattern Recognition</h3>
-                        <p class="text-sm">The LSTM identifies non-linear patterns that human eyes might miss.</p>
-                    </div>
+
+                <div class="glass-card p-8 rounded-2xl flex flex-col justify-center">
+                    <h3 class="text-2xl font-semibold text-white mb-3 text-orange-400">Analyzing Market Sentiment</h3>
+                    <p class="text-gray-400 leading-relaxed">
+                        Markets are heavily driven by human emotion. Modern AI doesn't just look at numbers—it evaluates text. By rapidly scanning news articles, social media trends, and financial reports, AI can help gauge the overall "mood" or sentiment surrounding a particular company or industry sector.
+                    </p>
                 </div>
             </div>
+
+            <div class="glass-card p-8 rounded-2xl">
+                <h2 class="text-3xl font-semibold text-white mb-4">Algorithmic Trading & The Future</h2>
+                <p class="text-gray-300 leading-relaxed">
+                    When broad AI insights are combined with automated systems, the result is Algorithmic Trading. These programs can execute trades based on established parameters the moment a specific pattern is detected. While no technology can predict the future with absolute certainty, AI and ML serve as powerful tools to help traders navigate the complexity of the global market.
+                </p>
+            </div>
+
         </div>
     </main>
+
+    <footer class="footer">
+        <div class="footer-wrapper">
+            <div class="footer-left">
+                <a href="dashboard.html" class="logo-link">
+                    <div class="logo"><img src="/static/images/logo.png" alt="Logo" class="logo-img"><span class="logo-text">TradeAlchemy</span></div>
+                </a>
+                <p class="footer-description">Semester 3 Project</p>
+            </div>
+            <div class="footer-right">
+                <div class="footer-col"><h4>Learn</h4><a href="stock_market.html">Stock Market</a><a href="ai_ml.html">AI ML</a></div>
+            </div>
+        </div>
+    </footer>
 
 </body>
 </html>
