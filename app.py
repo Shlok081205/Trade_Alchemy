@@ -55,7 +55,10 @@ app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(16))
 
 try:
     # Initialize database manager (creates tables if not exist)
-    db = DatabaseManager()
+    import os
+
+    db_path = os.environ.get("DATABASE_PATH", "/tmp/app.db")
+    db = DatabaseManager(db_path=db_path)
 
     # Initialize authentication manager (handles user accounts)
     auth = AuthManager(db)
