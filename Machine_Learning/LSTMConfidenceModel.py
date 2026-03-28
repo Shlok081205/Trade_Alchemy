@@ -370,21 +370,4 @@ class MultiTimeframeLSTM:
             print(f"LSTM Training Error: {e}")
             return None
     
-    def predict_next(self, df):
-        """
-        Helper method for existing calls (if any).
-        
-        This method is a placeholder for compatibility with older code
-        that may be calling predict_next() directly.
-        
-        Args:
-            df: Input data
-        
-        Returns:
-            None (not implemented, use train_and_predict instead)
-        
-        Note:
-            Use train_and_predict() method instead, which handles
-            the complete training and prediction pipeline.
-        """
-        pass
+

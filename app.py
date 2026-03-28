@@ -46,7 +46,7 @@ app = Flask(__name__)
 
 # Generate a random secret key for session management
 # This key is used to encrypt session cookies
-app.secret_key = secrets.token_hex(16)  # 32-character hex string
+app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(16))
 
 
 # ============================================================================
@@ -56,19 +56,51 @@ app.secret_key = secrets.token_hex(16)  # 32-character hex string
 try:
     # Initialize database manager (creates tables if not exist)
     db = DatabaseManager()
-    
+
     # Initialize authentication manager (handles user accounts)
     auth = AuthManager(db)
-    
+
     # Get Gemini API key from environment variables
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-    
+
     # Initialize stock analyzer (scraping + ML predictions)
     analyzer = StockAnalyzer(gemini_api_key=GEMINI_API_KEY)
-    
+
     print("✓ System modules initialized successfully.")
 except Exception as e:
     print(f"❌ Initialization Error: {e}")
+
+
+# ============================================================================
+# PREDICTION CACHE (pre-trained results served on free tier)
+# ============================================================================
+
+# Tickers to pre-train at startup — keep to 3-5, each takes ~1-2 min
+CACHED_TICKERS = ["AAPL", "GOOGL", "MSFT", "TSLA", "RELIANCE.NS"]
+prediction_cache = {}
+
+
+def warm_cache():
+    """Pre-run LSTM pipeline for each cached ticker and store results."""
+    print("Warming prediction cache...")
+    for ticker in CACHED_TICKERS:
+        try:
+            print(f"  Training model for {ticker}...")
+            result = analyzer.analyze_for_api(ticker)
+            if result:
+                prediction_cache[ticker.upper()] = result
+                print(f"  Cached {ticker}.")
+            else:
+                print(f"  No result for {ticker}, skipping.")
+        except Exception as e:
+            print(f"  Failed to cache {ticker}: {e}")
+    print("Cache warm-up complete.")
+
+
+# Run warm_cache in a background thread so Render health checks pass
+# while LSTM training happens behind the scenes
+import threading
+threading.Thread(target=warm_cache, daemon=True).start()
 
 
 # ============================================================================
@@ -78,21 +110,21 @@ except Exception as e:
 def clean_data(data):
     """
     Recursively replace NaN/Infinity with None for valid JSON serialization.
-    
+
     Python's math.nan and math.inf are not valid JSON. This function
     recursively traverses dictionaries and lists, replacing any NaN or
     Infinity values with None.
-    
+
     Args:
         data: Any Python object (dict, list, float, etc.)
-    
+
     Returns:
         Same structure with NaN/Inf replaced by None
-    
+
     Use Case:
         Stock data from yfinance often contains NaN values. JSON
         serialization will fail unless these are converted to null.
-    
+
     Example:
         >>> data = {'price': float('nan'), 'volume': 1000000}
         >>> clean_data(data)
@@ -119,22 +151,22 @@ def clean_data(data):
 def login_required(f):
     """
     Decorator to protect routes that require authentication.
-    
+
     This decorator checks if the user has a valid session. If not,
     redirects to the landing page.
-    
+
     Args:
         f: The route function to protect
-    
+
     Returns:
         Decorated function that checks authentication
-    
+
     Usage:
         @app.route('/dashboard')
         @login_required
         def dashboard():
             return "Welcome to your dashboard!"
-    
+
     How It Works:
         1. Checks if 'user_id' exists in session
         2. If yes: Allows access to the route
@@ -147,7 +179,7 @@ def login_required(f):
             return redirect(url_for('landing'))
         # User authenticated - proceed to route
         return f(*args, **kwargs)
-    
+
     return decorated_function
 
 
@@ -159,10 +191,10 @@ def login_required(f):
 def landing():
     """
     Landing page route (login/signup page).
-    
+
     If user is already logged in, redirects to dashboard.
     Otherwise, serves the landing.html page.
-    
+
     Returns:
         - Redirect to dashboard if logged in
         - landing.html if not logged in
@@ -179,9 +211,9 @@ def landing():
 def dashboard():
     """
     Main dashboard page (search interface).
-    
+
     Protected route - requires authentication.
-    
+
     Returns:
         dashboard.html
     """
@@ -194,10 +226,10 @@ def dashboard():
 def search_page():
     """
     Stock search results page (general mode).
-    
+
     Displays fundamentals, charts, and basic analysis.
     Protected route - requires authentication.
-    
+
     Returns:
         search.html
     """
@@ -210,10 +242,10 @@ def search_page():
 def ai_prediction_page():
     """
     AI prediction page (LSTM analysis mode).
-    
+
     Displays ML-powered volatility predictions with confidence scores.
     Protected route - requires authentication.
-    
+
     Returns:
         ai_prediction.html
     """
@@ -226,10 +258,10 @@ def ai_prediction_page():
 def watchlist_page():
     """
     User's watchlist page (tracked stocks).
-    
+
     Displays user's saved stocks with real-time prices.
     Protected route - requires authentication.
-    
+
     Returns:
         watchlist.html
     """
@@ -242,10 +274,10 @@ def watchlist_page():
 def account_page():
     """
     Account settings page (profile management).
-    
+
     Allows user to change password, email, etc.
     Protected route - requires authentication.
-    
+
     Returns:
         account.html
     """
@@ -254,43 +286,15 @@ def account_page():
 
 # --- EDUCATIONAL CONTENT PAGES (Public Access) ---
 
-@app.route('/team')
-@app.route('/team.html')
-def team_page():
-    """
-    Team page - displays project team information.
-    
-    Public access (no login required).
-    
-    Returns:
-        team.html
-    """
-    return send_from_directory('templates', 'team.html')
-
-
-@app.route('/journey')
-@app.route('/journey.html')
-def journey_page():
-    """
-    Journey page - project development story.
-    
-    Public access (no login required).
-    
-    Returns:
-        journey.html
-    """
-    return send_from_directory('templates', 'journey.html')
-
-
 @app.route('/stock_market')
 @app.route('/stock_market.html')
 def stock_market_page():
     """
     Stock market education page.
-    
+
     Educational content about stock market basics.
     Public access (no login required).
-    
+
     Returns:
         stock_market.html
     """
@@ -302,10 +306,10 @@ def stock_market_page():
 def ai_ml_page():
     """
     AI/ML education page.
-    
+
     Educational content about AI/ML in trading.
     Public access (no login required).
-    
+
     Returns:
         ai_ml.html
     """
@@ -320,7 +324,7 @@ def ai_ml_page():
 def serve_css():
     """
     Serve main CSS stylesheet.
-    
+
     Returns:
         style.css from static/css directory
     """
@@ -331,10 +335,10 @@ def serve_css():
 def serve_images(filename):
     """
     Serve image files (logo, icons, etc.).
-    
+
     Args:
         filename: Path to image file
-    
+
     Returns:
         Image file from static/images directory
     """
@@ -349,14 +353,14 @@ def serve_images(filename):
 def signup():
     """
     Create new user account.
-    
+
     Request Body:
         {
             "username": "john",
             "email": "john@example.com",
             "password": "SecurePass123"
         }
-    
+
     Response:
         Success: {
             'success': True,
@@ -368,7 +372,7 @@ def signup():
             'message': 'Error message',
             'requires_verification': False
         }
-    
+
     Side Effects:
         - Creates user in database (unverified)
         - Sends OTP verification email
@@ -386,17 +390,17 @@ def signup():
 def verify_otp():
     """
     Verify email with OTP code.
-    
+
     Request Body:
         {
             "email": "john@example.com",
             "otp": "1234"
         }
-    
+
     Response:
         Success: {'success': True, 'message': 'Email verified successfully!'}
         Failure: {'success': False, 'message': 'Invalid or expired code'}
-    
+
     Side Effects:
         - Activates user account (is_verified = 1)
         - Marks OTP as used
@@ -413,13 +417,13 @@ def verify_otp():
 def login():
     """
     Authenticate user and create session.
-    
+
     Request Body:
         {
             "login": "john@example.com",  // username or email
             "password": "SecurePass123"
         }
-    
+
     Response:
         Success: {
             'success': True,
@@ -431,7 +435,7 @@ def login():
             'success': False,
             'message': 'Invalid credentials'
         }
-    
+
     Side Effects:
         - Creates session with user_id and username
         - Session cookie sent to client
@@ -441,13 +445,13 @@ def login():
         data.get('login'),
         data.get('password')
     )
-    
+
     if result.get('success'):
         # Store user info in session
         session['user_id'] = result['user_id']
         session['username'] = result['username']
         return jsonify({'success': True, 'message': 'Login successful'})
-    
+
     return jsonify(result)
 
 
@@ -455,10 +459,10 @@ def login():
 def logout():
     """
     Destroy user session (log out).
-    
+
     Response:
         {'success': True}
-    
+
     Side Effects:
         - Clears all session data
         - Invalidates session cookie
@@ -476,7 +480,7 @@ def logout():
 def user_info():
     """
     Get current user's account information.
-    
+
     Response:
         Success: {
             'success': True,
@@ -500,13 +504,13 @@ def user_info():
 def change_password():
     """
     Change user's password.
-    
+
     Request Body:
         {
             "old_password": "OldPass123",
             "new_password": "NewPass456"
         }
-    
+
     Response:
         Success: {'success': True, 'message': 'Password updated successfully'}
         Failure: {'success': False, 'message': 'Error message'}
@@ -525,16 +529,16 @@ def change_password():
 def request_email_change():
     """
     Request email change (sends OTP to new email).
-    
+
     Request Body:
         {
             "new_email": "newemail@example.com"
         }
-    
+
     Response:
         Success: {'success': True, 'message': 'Code sent to newemail@example.com'}
         Failure: {'success': False, 'message': 'Error message'}
-    
+
     Side Effects:
         - Generates OTP
         - Sends verification email to NEW address
@@ -552,17 +556,17 @@ def request_email_change():
 def verify_email_change():
     """
     Complete email change with OTP verification.
-    
+
     Request Body:
         {
             "new_email": "newemail@example.com",
             "otp": "1234"
         }
-    
+
     Response:
         Success: {'success': True, 'message': 'Email successfully updated!'}
         Failure: {'success': False, 'message': 'Invalid or expired code'}
-    
+
     Side Effects:
         - Updates email in database
         - Marks OTP as used
@@ -585,7 +589,7 @@ def verify_email_change():
 def get_watchlist():
     """
     Get user's watchlist with real-time prices.
-    
+
     Response:
         {
             'success': True,
@@ -613,13 +617,13 @@ def get_watchlist():
 def add_to_watchlist():
     """
     Add stock to watchlist.
-    
+
     Request Body:
         {
             "ticker": "AAPL",
             "date": "2024-02-19"  // optional
         }
-    
+
     Response:
         Success: {'success': True, 'message': 'AAPL added to watchlist'}
         Duplicate: {'success': False, 'message': 'AAPL is already in your watchlist'}
@@ -639,12 +643,12 @@ def add_to_watchlist():
 def remove_from_watchlist():
     """
     Remove stock from watchlist.
-    
+
     Request Body:
         {
             "ticker": "AAPL"
         }
-    
+
     Response:
         Success: {'success': True, 'message': 'AAPL removed.'}
         Not found: {'success': False, 'message': 'Stock not found in watchlist.'}
@@ -664,12 +668,12 @@ def remove_from_watchlist():
 def get_search_data():
     """
     Get comprehensive stock data (fundamentals + historical prices).
-    
+
     Query Parameters:
         - ticker: Stock ticker symbol (required)
         - period: Historical data period (default: 'max')
             Options: '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'max'
-    
+
     Response:
         {
             'success': True,
@@ -690,17 +694,17 @@ def get_search_data():
                 ...
             ]
         }
-    
+
     Data Sources:
         - Fundamentals: Custom Yahoo scraper (v10 endpoint)
         - Historical: yfinance library
     """
     ticker = request.args.get('ticker')
     period = request.args.get('period', 'max')
-    
+
     if not ticker:
         return jsonify({'success': False, 'message': 'Ticker required'})
-    
+
     try:
         # 1. FETCH FUNDAMENTALS
         scraper_data = {}
@@ -716,23 +720,23 @@ def get_search_data():
                 scraper_data = data
         except Exception as e:
             print(f"⚠️ Scraper warning for {ticker}: {e}")
-        
+
         # 2. FETCH HISTORICAL DATA (Chart)
         stock = yf.Ticker(ticker)
         hist = stock.history(period=period, interval="1d")
-        
+
         chart_data = []
         if hasattr(hist, 'empty') and not hist.empty:
             hist = hist.reset_index()
-            
+
             # Convert to candlestick format
             for _, row in hist.iterrows():
                 if pd.isna(row['Close']):
                     continue
-                
+
                 # Unix timestamp in milliseconds
                 ts = int(row['Date'].timestamp() * 1000)
-                
+
                 chart_data.append({
                     'x': ts,
                     'y': [
@@ -743,14 +747,14 @@ def get_search_data():
                     ],
                     'v': row['Volume']
                 })
-        
+
         # Check if we got any data
         if not scraper_data and not chart_data:
             return jsonify({
                 'success': False,
                 'message': 'No data found for this ticker'
             })
-        
+
         # Package response
         response_data = {
             'success': True,
@@ -758,9 +762,9 @@ def get_search_data():
             'fundamentals': scraper_data,
             'chart_data': chart_data
         }
-        
+
         return jsonify(clean_data(response_data))
-    
+
     except Exception as e:
         print(f"CRITICAL API ERROR: {e}")
         return jsonify({
@@ -774,10 +778,10 @@ def get_search_data():
 def predict():
     """
     Get AI-powered volatility prediction for a stock.
-    
+
     Query Parameters:
         - ticker: Stock ticker symbol (required)
-    
+
     Response:
         {
             'ticker': 'AAPL',
@@ -789,14 +793,14 @@ def predict():
             'atr': 2.45,
             'current_price': 178.50
         }
-    
+
     Process:
         1. Fetch ecosystem data (peers, partners) from Gemini
         2. Download 5 years of price data
         3. Calculate technical indicators + context features
         4. Train LSTM model
         5. Predict tomorrow's volatility
-    
+
     Prediction Interpretation:
         - direction: "UP" (low volatility) or "DOWN" (high volatility)
         - confidence: How certain the model is (0-1)
@@ -805,9 +809,21 @@ def predict():
     ticker = request.args.get('ticker')
     if not ticker:
         return jsonify({'success': False, 'message': 'Ticker required'})
-    
-    result = analyzer.analyze_for_api(ticker)
-    return jsonify(result)
+
+    ticker_upper = ticker.upper()
+
+    if ticker_upper in prediction_cache:
+        return jsonify(prediction_cache[ticker_upper])
+
+    supported = ', '.join(CACHED_TICKERS)
+    return jsonify({
+        'success': False,
+        'message': (
+            f"'{ticker_upper}' is not available in the demo. "
+            f"Supported tickers: {supported}. "
+            f"Note: predictions may still be loading — try again in a moment."
+        )
+    })
 
 
 # ============================================================================
@@ -815,17 +831,5 @@ def predict():
 # ============================================================================
 
 if __name__ == '__main__':
-    """
-    Run the Flask development server.
-    
-    Configuration:
-        - Debug mode: Enabled (auto-reload on code changes)
-        - Host: 127.0.0.1 (localhost only)
-        - Port: 5000 (default Flask port)
-    
-    Note:
-        For production deployment, use a production WSGI server like:
-        - Gunicorn: gunicorn -w 4 app:app
-        - uWSGI: uwsgi --http :5000 --wsgi-file app.py --callable app
-    """
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)

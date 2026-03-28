@@ -64,7 +64,7 @@ class Gemini:
         
         Returns:
             str: Raw JSON string from Gemini containing:
-                - partners: Top 3 business partners (clients/suppliers/alliances)
+                - partners: Top 5 business partners (clients/suppliers/alliances)
                 - peers: Top 3 direct competitors
                 - sectoral_index: Sector-specific market index (same country)
                 - market_index: General market index (same country)
