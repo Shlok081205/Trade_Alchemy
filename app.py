@@ -79,12 +79,12 @@ except Exception as e:
 # ============================================================================
 
 # Tickers to pre-train at startup — keep to 3-5, each takes ~1-2 min
-CACHED_TICKERS = ["AAPL", "GOOGL", "MSFT", "TSLA", "RELIANCE.NS"]
+CACHED_TICKERS = ["AAPL"]
 prediction_cache = {}
 
 
 def warm_cache():
-    """Pre-run LSTM pipeline for each cached ticker and store results."""
+    import tensorflow as tf
     print("Warming prediction cache...")
     for ticker in CACHED_TICKERS:
         try:
@@ -97,6 +97,8 @@ def warm_cache():
                 print(f"  No result for {ticker}, skipping.")
         except Exception as e:
             print(f"  Failed to cache {ticker}: {e}")
+        finally:
+            tf.keras.backend.clear_session()
     print("Cache warm-up complete.")
 
 
