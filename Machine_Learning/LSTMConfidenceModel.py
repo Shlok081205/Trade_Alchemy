@@ -15,14 +15,17 @@ Key Features:
 Author: TradeAlchemy Team
 """
 
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_USE_LEGACY_KERAS'] = '1'
 import numpy as np
 import tensorflow as tf
 from sklearn.preprocessing import RobustScaler
 from sklearn.metrics import accuracy_score
 from sklearn.utils.class_weight import compute_class_weight
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout, Bidirectional, BatchNormalization
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from keras.models import Sequential
+from keras.layers import LSTM, Dense, Dropout, Bidirectional, BatchNormalization
+from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 import time
 
 
